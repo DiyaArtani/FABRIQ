@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-hanken: "Hanken Grotesk", sans-serif;
+  --font-geist: "Geist", monospace;
+  
+  --color-forest: #006b2c;
+  --color-forest-dark: #1ca64d;
+  
+  --animate-pulse-width: pulse-width 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-width {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+html, body {
+  font-family: "Inter", sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f5;
+  transition: background-color 0.3s ease;
+}
+
+html.dark, html.dark body {
+  background-color: #09090b;
+}
+
+/* Custom transitions and scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 10px;
+}
+
+.glass-nav {
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Bento card styles matching employee module theme */
+.bento-card {
+  border-radius: 1rem;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.light .bento-card {
+  background: #ffffff;
+  border: 1px solid #e4e4e7; /* Subtle light gray border */
+  color: #111827;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .bento-card {
+  background: #111113;
+  border: 1px solid #27272a; /* Subtle dark gray border */
+  color: #f4f4f5;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25);
+}
+
+
+
+/* Table header classic steel blue grid styling */
+th {
+  background-color: #f3f4f6 !important;
+  border-bottom: 2px solid #1f2937 !important;
+  color: #111827 !important;
+  font-weight: 700 !important;
+}
+.dark th {
+  background-color: #18181b !important;
+  border-bottom: 2px solid #52525b !important;
+  color: #f4f4f5 !important;
+}
+
+/* System scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #18181b;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 0px !important;
+}
+
+/* Pulse animation */
+.emerald-pulse {
+  animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-emerald {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+}
+
+/* Material symbols simulation if fonts are loading or missing */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
