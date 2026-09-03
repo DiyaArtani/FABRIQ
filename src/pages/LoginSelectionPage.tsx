@@ -20,10 +20,11 @@ export const LoginSelectionPage: React.FC = () => {
   const navigate = useNavigate();
 
   const handleChooseEmployeeLogin = () => {
-    if (!isEmployeeAuthenticated) {
-      loginAsEmployee();
+    if (isEmployeeAuthenticated) {
+      navigate('/app');
+    } else {
+      navigate('/employee-login');
     }
-    navigate('/');
   };
 
   const handleChooseAdminLogin = () => {

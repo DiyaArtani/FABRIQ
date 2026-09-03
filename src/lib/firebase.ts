@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
+import { getAuth, Auth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
@@ -36,4 +36,39 @@ if (isFirebaseConfigured) {
   }
 }
 
-export { app, auth, db, storage };
+/**
+ * Creates a user account directly in Firebase Authentication without signing out
+ * the current active administrator session in the browser.
+ */
+let secondaryApp: FirebaseApp | null = null;
+
+export async function createFirebaseAuthUser(
+  email: string,
+  pass: string,
+  displayName?: string
+): Promise<{ uid: string } | null> {
+  if (!isFirebaseConfigured) {
+    console.warn('Firebase is not configured, skipping Firebase Auth user creation.');
+    return null;
+  }
+
+  const existing = getApps().find(a => a.name === 'SecondaryAuth');
+  secondaryApp = existing || initializeApp(firebaseConfig, 'SecondaryAuth');
+  const secondaryAuth = getAuth(secondaryApp);
+
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), pass);
+  if (displayName && cred.user) {
+    try {
+      await updateProfile(cred.user, { displayName });
+    } catch {
+      // non-critical if display name update fails
+    }
+  }
+
+  const uid = cred.user.uid;
+  // Sign out from the secondary auth instance immediately
+  await signOut(secondaryAuth);
+  return { uid };
+}
+
+export { app, auth, db, storage, firebaseConfig };

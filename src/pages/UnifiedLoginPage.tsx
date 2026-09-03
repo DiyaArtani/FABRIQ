@@ -125,13 +125,13 @@ export const UnifiedLoginPage: React.FC = () => {
   };
 
   // Handle Employee Form Submission
-  const handleEmployeeSubmit = (e: React.FormEvent) => {
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setLoading(true);
 
     try {
-      const res = loginAsEmployeeWithCredentials(employeeIdentifier, employeePin);
+      const res = await loginAsEmployeeWithCredentials(employeeIdentifier, employeePin);
       if (res.success) {
         navigate('/app');
       } else {

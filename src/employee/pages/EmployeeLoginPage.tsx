@@ -7,7 +7,7 @@ import { AppUser } from '../../types';
 
 export const EmployeeLoginPage: React.FC = () => {
   const { users } = useFabriqData();
-  const { loginAsEmployee } = useAdminAuth();
+  const { loginAsEmployee, loginAsEmployeeWithCredentials } = useAdminAuth();
   const navigate = useNavigate();
 
   // Filter out any admin accounts from employee side
@@ -29,6 +29,8 @@ export const EmployeeLoginPage: React.FC = () => {
     }
   }, [nonAdminStaff, selectedUser]);
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const handleKeyPress = (num: string) => {
     if (pin.length < 6) {
       setPin(prev => prev + num);
@@ -41,29 +43,34 @@ export const EmployeeLoginPage: React.FC = () => {
     setErrorMsg('');
   };
 
-  const handleLogin = (e?: React.FormEvent) => {
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
-    // If no staff user is selected but no users in DB yet, create an active staff session
-    const activeStaff: AppUser = selectedUser || {
-      id: 'staff-default',
-      employeeId: 'EMP-01',
-      name: 'Floor Operator',
-      email: 'floor@fabriq.com',
-      phone: '+91 98765 00000',
-      role: 'Employee',
-      status: 'Active',
-      createdAt: new Date().toISOString()
-    };
+    if (!selectedUser) {
+      setErrorMsg('Please select your staff profile from the list.');
+      return;
+    }
+    if (!pin) {
+      setErrorMsg('Please enter your Security PIN.');
+      return;
+    }
 
-    const expectedPin = activeStaff.pin || '1234';
-    if (pin === expectedPin || pin === '1234' || pin === '0000' || !activeStaff.pin) {
-      loginAsEmployee(activeStaff);
-      localStorage.setItem('fabriq_employee_auth', JSON.stringify(activeStaff));
-      navigate('/app');
-    } else {
-      setErrorMsg('Invalid Security PIN. Please try again.');
+    setIsLoggingIn(true);
+    setErrorMsg('');
+
+    try {
+      const res = await loginAsEmployeeWithCredentials(selectedUser.email || selectedUser.employeeId, pin);
+      if (res.success) {
+        localStorage.setItem('fabriq_employee_auth', JSON.stringify(selectedUser));
+        navigate('/app');
+      } else {
+        setErrorMsg(res.message || 'Firebase Authentication failed.');
+        setPin('');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Authentication error.');
       setPin('');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -216,11 +223,23 @@ export const EmployeeLoginPage: React.FC = () => {
 
             <button
               type="button"
+              disabled={isLoggingIn}
               onClick={() => handleLogin()}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-950 transition-all cursor-pointer flex items-center justify-center gap-2 mt-3"
+              className={`w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-950 transition-all cursor-pointer flex items-center justify-center gap-2 mt-3 ${
+                isLoggingIn ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             >
-              <span>Authenticate &amp; Open Floor App</span>
-              <ArrowRight className="w-4 h-4" />
+              {isLoggingIn ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>AUTHENTICATING VIA FIREBASE...</span>
+                </>
+              ) : (
+                <>
+                  <span>Authenticate &amp; Open Floor App</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>
