@@ -2,7 +2,7 @@ import React from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
-import { ProductionOrder, StockItem, Invoice, Notification } from '../../types';
+import { ProductionOrder, StockItem, Invoice } from '../../types';
 import { ShieldCheck, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../../admin/context/AdminAuthContext';
@@ -12,9 +12,6 @@ interface EmployeeLayoutProps {
   setActiveTab: (tab: string) => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
-  notifications: Notification[];
-  onMarkNotificationRead: (id: string) => void;
-  onClearNotifications: () => void;
   productionOrders: ProductionOrder[];
   stockItems: StockItem[];
   invoices: Invoice[];
@@ -26,9 +23,6 @@ export const EmployeeLayout: React.FC<EmployeeLayoutProps> = ({
   setActiveTab,
   isDarkMode,
   onToggleTheme,
-  notifications,
-  onMarkNotificationRead,
-  onClearNotifications,
   productionOrders,
   stockItems,
   invoices,
@@ -85,9 +79,6 @@ export const EmployeeLayout: React.FC<EmployeeLayoutProps> = ({
       <Header
         isDarkMode={isDarkMode}
         onToggleTheme={onToggleTheme}
-        notifications={notifications}
-        onMarkNotificationRead={onMarkNotificationRead}
-        onClearNotifications={onClearNotifications}
         activeTab={activeTab}
       />
 

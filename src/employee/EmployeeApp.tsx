@@ -16,15 +16,12 @@ export const EmployeeApp: React.FC = () => {
     productionOrders,
     stockItems,
     invoices,
-    notifications,
     addProductionOrder,
     updateProductionOrder,
     addStockItem,
     addInvoice,
     addPurchase,
     addCustomer,
-    markNotificationRead,
-    clearNotifications,
     rawInventory
   } = useFabriqData();
 
@@ -95,9 +92,6 @@ export const EmployeeApp: React.FC = () => {
       setActiveTab={setActiveTab}
       isDarkMode={isDarkMode}
       onToggleTheme={handleToggleTheme}
-      notifications={notifications}
-      onMarkNotificationRead={markNotificationRead}
-      onClearNotifications={clearNotifications}
       productionOrders={productionOrders}
       stockItems={stockItems}
       invoices={invoices}

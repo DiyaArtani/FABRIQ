@@ -100,7 +100,7 @@ export default function FormsAndModals({
       dueDate: orderDueDate || '2026-03-15',
       status: 'In Progress',
       rawInventoryId: selectedRawInvId || undefined,
-      rawBatchId: selectedRaw?.batchId || undefined,
+      rawBatchId: selectedRaw?.invoiceNumber || selectedRaw?.batchId || undefined,
       fabricName: selectedRaw?.fabricName || undefined,
       metersRequired: metersToUse || undefined,
       metersAllocated: metersToUse || undefined,
@@ -167,11 +167,13 @@ export default function FormsAndModals({
         status: 'Confirmed'
       });
     } else {
+      const invCode = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
       onSubmitInvoice({
+        invoiceNumber: invCode,
+        invoiceCode: invCode,
         client: cust.name,
         customerName: cust.name,
         date: new Date().toISOString().substring(0, 10),
-        invoiceCode: `INV-2026-${Math.floor(100 + Math.random() * 900)}`,
         amount: saleQuantity * salePrice,
         status: 'Pending',
         itemsSummary: `${saleQuantity} Pcs Garments`
@@ -278,7 +280,7 @@ export default function FormsAndModals({
                   <option value="">— Select fabric from Raw Inventory —</option>
                   {availableRawMaterials.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.fabricName} ({r.color}) — {r.availableMeters}m available (Batch: {r.batchId})
+                      {r.fabricName} — {r.availableMeters}m available (Inv: {r.invoiceNumber || r.batchId})
                     </option>
                   ))}
                 </select>

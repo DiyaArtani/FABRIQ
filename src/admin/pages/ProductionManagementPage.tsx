@@ -29,6 +29,7 @@ export const ProductionManagementPage: React.FC = () => {
     productionOrders,
     contractors,
     rawInventory,
+    purchases,
     addProductionOrder,
     updateProductionOrder,
     deleteProductionOrder
@@ -69,6 +70,32 @@ export const ProductionManagementPage: React.FC = () => {
   const selectedRawMaterial = useMemo(() => {
     return rawInventory.find(r => r.id === selectedRawInventoryId);
   }, [rawInventory, selectedRawInventoryId]);
+
+  const getRawItemInvoiceNo = (r: any) => {
+    if (!r) return 'N/A';
+    const p = purchases.find(
+      (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
+    );
+    return (
+      p?.invoiceNumber ||
+      p?.billNumber ||
+      (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
+      (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : 'N/A')
+    );
+  };
+
+  const getOrderInvoiceNo = (po: ProductionOrder) => {
+    const raw = rawInventory.find((r) => r.id === po.rawInventoryId);
+    const p = purchases.find(
+      (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
+    );
+    return (
+      p?.invoiceNumber ||
+      p?.billNumber ||
+      raw?.invoiceNumber ||
+      (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : 'N/A')
+    );
+  };
 
   // Generate next unique Challan Number
   const getNextChallanNumber = () => {
@@ -207,7 +234,7 @@ export const ProductionManagementPage: React.FC = () => {
         stageHistory: [initialCuttingStage],
         // Pipeline linkage
         rawInventoryId: selectedRawInventoryId || undefined,
-        rawBatchId: selectedRawMaterial?.batchId || undefined,
+        rawBatchId: selectedRawMaterial ? getRawItemInvoiceNo(selectedRawMaterial) : undefined,
         fabricName: selectedRawMaterial?.fabricName || undefined,
         metersRequired: metersRequired || undefined,
         metersAllocated: metersRequired || undefined,
@@ -424,7 +451,7 @@ export const ProductionManagementPage: React.FC = () => {
                         <div>
                           <div className="text-zinc-800 dark:text-zinc-200 text-[11px] font-bold">{po.fabricName || 'Raw Fabric'}</div>
                           <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">{po.metersAllocated || po.metersRequired}m allocated</div>
-                          <div className="text-[9px] text-zinc-400">Batch: {po.rawBatchId}</div>
+                          <div className="text-[9px] text-zinc-400">Inv: {getOrderInvoiceNo(po)}</div>
                         </div>
                       ) : (
                         <span className="text-[10px] text-zinc-400">Direct In-House Stock</span>
@@ -600,7 +627,7 @@ export const ProductionManagementPage: React.FC = () => {
                   <option value="">— Select raw denim from inventory —</option>
                   {availableRawMaterials.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.fabricName} ({r.color}) — {r.availableMeters}m available — Batch: {r.batchId} — {r.warehouse}
+                      {r.fabricName} — {r.availableMeters}m available — Inv: {getRawItemInvoiceNo(r)} — {r.warehouse}
                     </option>
                   ))}
                 </select>
@@ -619,7 +646,7 @@ export const ProductionManagementPage: React.FC = () => {
                     Meters to Allocate (Available: {selectedRawMaterial.availableMeters}m)
                   </label>
                   <span className="text-[10px] font-mono text-emerald-600">
-                    Cost: ₹{selectedRawMaterial.costPerMeter}/m | Batch: {selectedRawMaterial.batchId}
+                    Cost: ₹{selectedRawMaterial.costPerMeter}/m | Inv: {getRawItemInvoiceNo(selectedRawMaterial)}
                   </span>
                 </div>
                 <input

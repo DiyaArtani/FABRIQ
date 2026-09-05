@@ -5,23 +5,37 @@ import { RawInventoryItem, FinishedInventoryItem } from '../../types';
 import { Search, MapPin, Package, Layers, Factory, ArrowRight, ShieldCheck, Edit3, X, SlidersHorizontal } from 'lucide-react';
 
 export default function InventoryTab() {
-  const { rawInventory, finishedInventory } = useFabriqData();
+  const { rawInventory, finishedInventory, purchases } = useFabriqData();
   const [activeTab, setActiveTab] = useState<'raw' | 'finished'>('raw');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLocation, setFilterLocation] = useState<string>('All');
 
-  // Filter logic for Raw Inventory
+  const getRawInvoice = (item: RawInventoryItem) => {
+    const p = purchases.find(
+      (pur) => pur.id === item.purchaseId || pur.billNumber === item.purchaseId || pur.invoiceNumber === item.purchaseId
+    );
+    return (
+      p?.invoiceNumber ||
+      p?.billNumber ||
+      (item.invoiceNumber && !item.invoiceNumber.startsWith('DF-2026-') ? item.invoiceNumber : '') ||
+      (item.batchId && !item.batchId.startsWith('DF-2026-') ? item.batchId : 'N/A')
+    );
+  };
+
+  // Filter logic for Raw Inventory (Exclude completely used raw materials)
   const filteredRaw = rawInventory.filter(item => {
+    if (item.availableMeters <= 0 || item.status === 'Depleted') return false;
+
     const name = item.fabricName || '';
     const color = item.color || '';
-    const batch = item.batchId || '';
+    const inv = getRawInvoice(item).toLowerCase();
     const loc = item.warehouse || '';
     const supp = item.supplierName || '';
 
     const matchesSearch =
       name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       color.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      batch.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inv.toLowerCase().includes(searchQuery.toLowerCase()) ||
       supp.toLowerCase().includes(searchQuery.toLowerCase()) ||
       loc.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -148,12 +162,12 @@ export default function InventoryTab() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">Batch: {r.batchId}</span>
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">Invoice: {getRawInvoice(r)}</span>
                     </div>
                     <h3 className="font-hanken font-bold text-sm text-gray-900 dark:text-neutral-100 mt-0.5">
-                      {r.fabricName} — {r.color}
+                      {r.fabricName}
                     </h3>
-                    <p className="text-[10px] text-gray-400">{r.supplierName} • {r.width} • {r.gsmWeight}</p>
+                    <p className="text-[10px] text-gray-400">{r.supplierName} • {r.width || '58"'}</p>
                   </div>
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusBadgeStyle(r.status)}`}>
                     {r.status}
@@ -176,7 +190,7 @@ export default function InventoryTab() {
                 </div>
 
                 <div className="flex justify-between items-center text-[10px] text-gray-400 pt-1 border-t border-gray-50 dark:border-neutral-800">
-                  <span>Location: {r.warehouse} (Rack {r.rackLocation})</span>
+                  <span>Location: {r.warehouse}</span>
                   <span>Cost: ₹{r.costPerMeter}/m</span>
                 </div>
               </div>

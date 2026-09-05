@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Purchase } from '../types';
 import { calculatePurchaseTotals } from '../components/PurchaseUIComponents';
+import { useFabriqData } from '../../../../context/FabriqDataContext';
 
 interface PurchasePDFPreviewScreenProps {
   purchase: Purchase;
@@ -16,10 +17,22 @@ export default function PurchasePDFPreviewScreen({
   purchase,
   onBack
 }: PurchasePDFPreviewScreenProps) {
+  const { warehouses } = useFabriqData();
   const { subtotal, grandTotal } = calculatePurchaseTotals(purchase);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const targetWarehouseName = (purchase.warehouse || purchase.warehouseLocation || '').trim().toLowerCase();
+  const matchedWarehouse = (warehouses || []).find(
+    (w) =>
+      w.name.trim().toLowerCase() === targetWarehouseName ||
+      w.code.trim().toLowerCase() === targetWarehouseName ||
+      (targetWarehouseName && w.name.trim().toLowerCase().includes(targetWarehouseName)) ||
+      (targetWarehouseName && targetWarehouseName.includes(w.name.trim().toLowerCase()))
+  );
+  const warehouseContactPerson = matchedWarehouse?.managerName || '';
+  const warehousePhone = matchedWarehouse?.phone || '';
 
   const triggerToast = (msg: string) => {
     setSuccessMsg(msg);
@@ -175,6 +188,9 @@ export default function PurchasePDFPreviewScreen({
                   <h3 className="font-extrabold text-sm text-zinc-950">Fabriq Apparel Mills</h3>
                   <div className="text-zinc-500 font-medium space-y-1 mt-1.5">
                     <p><strong>Warehouse Location:</strong> {purchase.warehouse || purchase.warehouseLocation || 'Godown A - Main Mill'}</p>
+                    {warehouseContactPerson && (
+                      <p><strong>Contact Person:</strong> {warehouseContactPerson} {warehousePhone ? `(${warehousePhone})` : ''}</p>
+                    )}
                     <p><strong>Payment Status:</strong> <span className="text-emerald-600 font-bold">{purchase.paymentStatus}</span></p>
                     <p><strong>Payment Mode:</strong> {purchase.paymentMode || 'Bank Transfer'}</p>
                   </div>

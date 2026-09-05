@@ -73,7 +73,7 @@ export const UnifiedLoginPage: React.FC = () => {
   const [rememberAdmin, setRememberAdmin] = useState(true);
 
   // Employee Form State
-  const [employeeIdentifier, setEmployeeIdentifier] = useState('');
+  const [employeeEmail, setEmployeeEmail] = useState('');
   const [employeePin, setEmployeePin] = useState('');
   const [selectedUserObj, setSelectedUserObj] = useState<any>(null);
 
@@ -85,21 +85,14 @@ export const UnifiedLoginPage: React.FC = () => {
   const employeeUsers = React.useMemo(() => {
     return (users || []).filter(u => {
       const role = (u?.role || '').toLowerCase();
-      const dept = (u?.department || '').toLowerCase();
-      return (
-        role !== 'admin' &&
-        role !== 'super admin' &&
-        role !== 'administrator' &&
-        dept !== 'executive management' &&
-        u.status !== 'Disabled'
-      );
+      return role !== 'admin' && u.status !== 'Disabled';
     });
   }, [users]);
 
   // Quick Employee Select
   const handleSelectEmployeeProfile = (u: any) => {
     setSelectedUserObj(u);
-    setEmployeeIdentifier(u.employeeId || u.email || u.name);
+    setEmployeeEmail(u.email || '');
     setEmployeePin('');
     setErrorMsg(null);
   };
@@ -125,13 +118,13 @@ export const UnifiedLoginPage: React.FC = () => {
   };
 
   // Handle Employee Form Submission
-  const handleEmployeeSubmit = (e: React.FormEvent) => {
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setLoading(true);
 
     try {
-      const res = loginAsEmployeeWithCredentials(employeeIdentifier, employeePin);
+      const res = await loginAsEmployeeWithCredentials(employeeEmail, employeePin);
       if (res.success) {
         navigate('/app');
       } else {
@@ -218,11 +211,10 @@ export const UnifiedLoginPage: React.FC = () => {
                 setActiveTab('admin');
                 setErrorMsg(null);
               }}
-              className={`py-3 px-4 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                activeTab === 'admin'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-900'
-              }`}
+              className={`py-3 px-4 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${activeTab === 'admin'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-900'
+                }`}
             >
               <ShieldCheck className="w-4 h-4" />
               <span>ADMIN PORTAL</span>
@@ -234,11 +226,10 @@ export const UnifiedLoginPage: React.FC = () => {
                 setActiveTab('employee');
                 setErrorMsg(null);
               }}
-              className={`py-3 px-4 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                activeTab === 'employee'
-                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-900'
-              }`}
+              className={`py-3 px-4 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${activeTab === 'employee'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-900'
+                }`}
             >
               <UserCheck className="w-4 h-4" />
               <span>EMPLOYEE APP</span>
@@ -274,7 +265,7 @@ export const UnifiedLoginPage: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Security Key / Password
+                  Password
                 </label>
                 <input
                   type="password"
@@ -317,7 +308,7 @@ export const UnifiedLoginPage: React.FC = () => {
                 <div className="space-y-1.5">
                   <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                    Select Active Employee Account
+                    Select Employee
                   </label>
                   <select
                     value={selectedUserObj?.id || ''}
@@ -327,10 +318,10 @@ export const UnifiedLoginPage: React.FC = () => {
                     }}
                     className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-sky-500 text-zinc-900 dark:text-white font-sans text-xs rounded-xl outline-none transition-colors"
                   >
-                    <option value="">-- Choose Employee Profile --</option>
+                    <option value="">-- Choose Employee --</option>
                     {employeeUsers.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({u.role} - {u.department})
+                        {u.name} ({u.email || u.employeeId})
                       </option>
                     ))}
                   </select>
@@ -340,14 +331,14 @@ export const UnifiedLoginPage: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                  Employee ID, Email, or Name
+                  Employee Email
                 </label>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={employeeIdentifier}
-                  onChange={(e) => setEmployeeIdentifier(e.target.value)}
-                  placeholder="e.g. EMP-101 or user@domain.com"
+                  value={employeeEmail}
+                  onChange={(e) => setEmployeeEmail(e.target.value)}
+                  placeholder="e.g. employee@fabriq.com"
                   className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-sky-500 text-zinc-900 dark:text-white font-sans text-xs rounded-xl outline-none transition-colors"
                 />
               </div>
@@ -371,7 +362,7 @@ export const UnifiedLoginPage: React.FC = () => {
                 disabled={loading}
                 className="w-full py-3.5 bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md rounded-xl cursor-pointer"
               >
-                <span>{loading ? 'SIGNING IN...' : 'ENTER SHOP FLOOR APP'}</span>
+                <span>{loading ? 'SIGNING IN...' : 'ENTER SHOP'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -381,7 +372,7 @@ export const UnifiedLoginPage: React.FC = () => {
 
       {/* Page Footer */}
       <div className="max-w-6xl mx-auto w-full text-center text-xs font-mono text-zinc-500 dark:text-zinc-500 py-2 relative z-10">
-        Fabriq Industrial Textile ERP &copy; 2026. Support for Light and Dark Modes.
+        Fabriq Industrial Textile ERP &copy; 2026.
       </div>
     </div>
   );

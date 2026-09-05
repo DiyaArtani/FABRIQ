@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   ProductionOrder,
   StockItem,
@@ -34,7 +34,7 @@ import {
   INITIAL_CUSTOMERS,
   INITIAL_AUDIT_LOGS
 } from '../data/initialMasterData';
-import { isFirebaseConfigured, db } from '../lib/firebase';
+import { isFirebaseConfigured, db, createFirebaseAuthUser } from '../lib/firebase';
 import { doc, writeBatch } from 'firebase/firestore';
 import {
   COLLECTIONS,
@@ -246,12 +246,20 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id: (userData as AppUser).id || `u-${Date.now()}`,
       createdAt: (userData as AppUser).createdAt || new Date().toISOString().substring(0, 10),
       lastLogin: (userData as AppUser).lastLogin || 'Never',
-      assignedWarehouse: userData.assignedWarehouse || 'All Locations',
       pin: userData.pin || '1234'
     };
 
     setUsers(prev => [newU, ...prev.filter(u => u.id !== newU.id)]);
-    if (isFirebaseConfigured) saveDocument(COLLECTIONS.USERS, newU).catch(console.error);
+    if (isFirebaseConfigured) {
+      saveDocument(COLLECTIONS.USERS, newU).catch(console.error);
+      if (newU.email) {
+        const rawPass = (newU.password || newU.pin || '123456').trim();
+        const authPass = rawPass.length >= 6 ? rawPass : rawPass.padEnd(6, '0');
+        createFirebaseAuthUser(newU.email, authPass, newU.name).catch((err) => {
+          console.warn('Firebase Auth registration notice for user:', err?.message);
+        });
+      }
+    }
     addAuditLog('Admin', 'USER_CREATE', 'User Management', `Created user account for ${newU.name} (${newU.role})`);
   };
 
@@ -334,7 +342,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const newS: Supplier = { ...data, id: `sup-${Date.now()}` };
     setSuppliers(prev => [newS, ...prev]);
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.SUPPLIERS, newS).catch(console.error);
-    addAuditLog('Admin', 'SUPPLIER_CREATE', 'Master Data', `Onboarded new supplier ${newS.name} (${newS.category})`);
+    addAuditLog('Admin', 'SUPPLIER_CREATE', 'Master Data', `Onboarded new supplier ${newS.name}`);
   };
 
   const updateSupplier = (data: Supplier) => {
@@ -394,10 +402,12 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (isReceived) {
       const rawInvId = `rinv-${Date.now()}`;
       const rawInvStatus = newP.meters > 200 ? 'Available' : (newP.meters > 0 ? 'Low' : 'Depleted');
+      const invoiceNo = newP.invoiceNumber || newP.billNumber || `INV-${Date.now().toString().slice(-4)}`;
       rawInvItem = {
         id: rawInvId,
         purchaseId: purchaseId,
-        batchId: `DF-2026-${Date.now().toString().slice(-4)}`,
+        batchId: invoiceNo,
+        invoiceNumber: invoiceNo,
         fabricName: newP.fabricName || 'Raw Fabric',
         color: 'Standard',
         width: newP.width || '58"',
@@ -446,10 +456,12 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!existing) {
           const rawInvId = `rinv-${Date.now()}`;
           const rawInvStatus = data.meters > 200 ? 'Available' : (data.meters > 0 ? 'Low' : 'Depleted');
+          const invoiceNo = data.invoiceNumber || data.billNumber || `INV-${Date.now().toString().slice(-4)}`;
           const newRaw: RawInventoryItem = {
             id: rawInvId,
             purchaseId: data.id,
-            batchId: `DF-2026-${Date.now().toString().slice(-4)}`,
+            batchId: invoiceNo,
+            invoiceNumber: invoiceNo,
             fabricName: data.fabricName || 'Raw Fabric',
             color: 'Standard',
             width: data.width || '58"',
@@ -469,8 +481,11 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
           return [newRaw, ...prev];
         } else {
+          const invoiceNo = data.invoiceNumber || data.billNumber || existing.invoiceNumber || existing.batchId;
           const updatedRaw: RawInventoryItem = {
             ...existing,
+            batchId: invoiceNo,
+            invoiceNumber: invoiceNo,
             fabricName: data.fabricName || existing.fabricName,
             warehouse: data.warehouse || data.warehouseLocation || existing.warehouse,
             totalMeters: Number(data.meters) || existing.totalMeters,
@@ -901,13 +916,50 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return result;
   };
 
+  // Automatically enrich raw inventory and production orders with true Supplier Invoice Numbers from linked purchases
+  const enrichedRawInventory = useMemo(() => {
+    return rawInventory.map((r) => {
+      const p = purchases.find(
+        (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
+      );
+      const trueInvoice =
+        p?.invoiceNumber ||
+        p?.billNumber ||
+        (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
+        (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : '');
+      return {
+        ...r,
+        invoiceNumber: trueInvoice || r.invoiceNumber || (p?.billNumber || r.batchId),
+        batchId: trueInvoice || r.batchId
+      };
+    });
+  }, [rawInventory, purchases]);
+
+  const enrichedProductionOrders = useMemo(() => {
+    return productionOrders.map((po) => {
+      const raw = rawInventory.find((r) => r.id === po.rawInventoryId);
+      const p = purchases.find(
+        (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
+      );
+      const trueInvoice =
+        p?.invoiceNumber ||
+        p?.billNumber ||
+        raw?.invoiceNumber ||
+        (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : '');
+      return {
+        ...po,
+        rawBatchId: trueInvoice || po.rawBatchId
+      };
+    });
+  }, [productionOrders, rawInventory, purchases]);
+
   return (
     <FabriqDataContext.Provider
       value={{
         isFirebaseConnected: isFirebaseConfigured,
         firebaseError,
         seedFirestore,
-        productionOrders,
+        productionOrders: enrichedProductionOrders,
         stockItems,
         invoices,
         notifications,
@@ -919,7 +971,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         purchases,
         auditLogs,
         settings,
-        rawInventory,
+        rawInventory: enrichedRawInventory,
         finishedInventory,
         sales,
         addUser,

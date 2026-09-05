@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Users,
   Plus,
   Search,
   UserCheck,
@@ -19,9 +18,10 @@ import {
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { AppUser, UserRole, UserStatus } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { createFirebaseAuthUser } from '../../lib/firebase';
 
 export const UserManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, toggleUserStatus, deleteUser, warehouses, firebaseError } = useFabriqData();
+  const { users, addUser, updateUser, toggleUserStatus, deleteUser, firebaseError } = useFabriqData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
@@ -38,10 +38,11 @@ export const UserManagementPage: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('Employee');
-  const [formWarehouse, setFormWarehouse] = useState('All Locations');
   const [formPassword, setFormPassword] = useState('');
   const [formPin, setFormPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const getNextEmployeeId = () => {
     let maxId = 0;
@@ -67,10 +68,10 @@ export const UserManagementPage: React.FC = () => {
     setFormEmail('');
     setFormPhone('');
     setFormRole('Employee');
-    setFormWarehouse(warehouses[0]?.name || 'All Locations');
     setFormPassword('');
     setFormPin('');
     setShowPassword(false);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
@@ -82,41 +83,99 @@ export const UserManagementPage: React.FC = () => {
     setFormPhone(u.phone);
     const role = u.role === 'Admin' ? 'Admin' : 'Employee';
     setFormRole(role);
-    setFormWarehouse(u.assignedWarehouse || 'All Locations');
     setFormPassword(u.password || (u.role === 'Admin' ? u.pin || '' : ''));
     setFormPin(u.pin || '1234');
     setShowPassword(false);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isAdmin = formRole === 'Admin';
-    const userPayload: AppUser = {
-      id: editingUser ? editingUser.id : `user-${Date.now()}`,
-      employeeId: formEmployeeId,
-      name: formName,
-      email: formEmail,
-      phone: formPhone,
-      role: formRole,
-      status: editingUser ? editingUser.status : 'Active',
-      assignedWarehouse: formWarehouse,
-      createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
-      ...(isAdmin
-        ? { password: formPassword, pin: formPassword }
-        : { pin: formPin, password: '' }
-      )
-    };
+    setFormError(null);
+    setIsSaving(true);
 
-    if (editingUser) {
-      updateUser({
-        ...editingUser,
-        ...userPayload
-      });
-    } else {
-      addUser(userPayload);
+    try {
+      const isAdmin = formRole === 'Admin';
+      
+      // Determine password for Firebase Auth (min 6 characters required by Firebase)
+      const authPassword = isAdmin
+        ? formPassword
+        : (formPin.length >= 6 ? formPin : formPin.padEnd(6, '0'));
+
+      if (isAdmin && formPassword.length < 6) {
+        setFormError('Admin password must be at least 6 characters for Firebase Authentication.');
+        setIsSaving(false);
+        return;
+      }
+      if (!isAdmin && formPin.length < 4) {
+        setFormError('Employee PIN must be at least 4 digits.');
+        setIsSaving(false);
+        return;
+      }
+
+      let firebaseUid: string | undefined = undefined;
+
+      // When creating a new user, register the account in Firebase Authentication
+      if (!editingUser) {
+        try {
+          const authRes = await createFirebaseAuthUser(formEmail, authPassword, formName);
+          if (authRes?.uid) {
+            firebaseUid = authRes.uid;
+          }
+        } catch (authErr: any) {
+          console.warn('Firebase Auth user registration info:', authErr);
+          if (authErr?.code === 'auth/email-already-in-use') {
+            setFormError('This email is already registered in Firebase Authentication.');
+            setIsSaving(false);
+            return;
+          } else if (authErr?.code === 'auth/invalid-email') {
+            setFormError('Invalid email address format for Firebase Authentication.');
+            setIsSaving(false);
+            return;
+          } else if (authErr?.code === 'auth/weak-password') {
+            setFormError('Password/PIN is too weak. Firebase requires at least 6 characters.');
+            setIsSaving(false);
+            return;
+          } else if (authErr?.code === 'auth/operation-not-allowed') {
+            setFormError('Email/Password provider is not enabled in Firebase Console. Please go to Firebase Console -> Authentication -> Sign-in method -> Enable Email/Password.');
+            setIsSaving(false);
+            return;
+          } else {
+            console.warn('Firebase Auth non-blocking warning:', authErr?.message);
+          }
+        }
+      }
+
+      const userPayload: AppUser = {
+        id: editingUser ? editingUser.id : (firebaseUid || `user-${Date.now()}`),
+        employeeId: formEmployeeId,
+        name: formName,
+        email: formEmail,
+        phone: formPhone,
+        role: formRole,
+        status: editingUser ? editingUser.status : 'Active',
+        createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
+        ...(isAdmin
+          ? { password: formPassword, pin: formPassword }
+          : { pin: formPin, password: '' }
+        )
+      };
+
+      if (editingUser) {
+        updateUser({
+          ...editingUser,
+          ...userPayload
+        });
+      } else {
+        addUser(userPayload);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to save user account.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
   // Filtering
@@ -154,24 +213,17 @@ export const UserManagementPage: React.FC = () => {
       {/* Header & Title Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 mb-1">
-            <Users className="w-4 h-4" />
-            <span>EMPLOYEE ACCESS CONTROLS</span>
-          </div>
           <h1 className="font-hanken font-bold text-xl text-zinc-900 dark:text-zinc-100 tracking-tight">
-            User Account Management
+            User Management
           </h1>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">
-            Manage system employee accounts, assign roles, enable/disable logins, and control Mobile App credentials.
-          </p>
         </div>
 
         <button
           onClick={openCreateModal}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors shrink-0"
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>REGISTER USER ACCOUNT</span>
+          <span>ADD USER</span>
         </button>
       </div>
 
@@ -260,17 +312,19 @@ export const UserManagementPage: React.FC = () => {
                     </span>
                   </td>
                   <td className="p-3 font-mono text-[11px]">
-                    {u.role === 'Admin' ? (
-                      <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 font-mono font-bold text-purple-700 dark:text-purple-300 rounded inline-flex items-center gap-1.5">
-                        <Lock className="w-3 h-3 text-purple-500" />
-                        <span>Password Protected</span>
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 rounded inline-flex items-center gap-1.5">
-                        <Key className="w-3 h-3 text-emerald-500" />
-                        <span>PIN: {u.pin || '1234'}</span>
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {u.role === 'Admin' ? (
+                        <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 font-mono font-bold text-purple-700 dark:text-purple-300 rounded inline-flex items-center gap-1.5">
+                          <Lock className="w-3 h-3 text-purple-500" />
+                          <span>Password Protected</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 rounded inline-flex items-center gap-1.5">
+                          <Key className="w-3 h-3 text-emerald-500" />
+                          <span>PIN: {u.pin || '1234'}</span>
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3">
                     <Badge status={u.status} />
@@ -319,10 +373,20 @@ export const UserManagementPage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingUser ? `Edit User (${editingUser.employeeId})` : 'Register User Account'}
-        subtitle="Configure system user account, assign roles, and set security credentials."
+        title={editingUser ? `Edit User (${editingUser.employeeId})` : 'Add User'}
+        subtitle="Manage user account details, credentials and role permissions."
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
+          {formError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-mono rounded flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Authentication Warning:</p>
+                <p className="text-[11px] mt-0.5">{formError}</p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-mono font-bold uppercase text-zinc-500">Employee Name</label>
@@ -445,16 +509,27 @@ export const UserManagementPage: React.FC = () => {
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
             <button
               type="button"
+              disabled={isSaving}
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 text-xs font-mono font-bold border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="px-4 py-2 text-xs font-mono font-bold border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
             >
               CANCEL
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold uppercase tracking-wider"
+              disabled={isSaving}
+              className={`px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                isSaving ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             >
-              {editingUser ? 'SAVE CHANGES' : 'CREATE ACCOUNT'}
+              {isSaving ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>SAVING...</span>
+                </>
+              ) : (
+                editingUser ? 'SAVE CHANGES' : 'CREATE ACCOUNT'
+              )}
             </button>
           </div>
         </form>
