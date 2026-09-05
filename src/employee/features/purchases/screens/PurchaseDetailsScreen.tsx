@@ -4,7 +4,7 @@ import {
   ArrowLeft, Printer, CheckCircle2, Clock, Truck, 
   Warehouse as WarehouseIcon, Layers, Phone, MapPin, 
   Building2, Landmark, DollarSign, Calendar, FileText,
-  ShieldCheck, AlertCircle, Edit3, PackageCheck, Lock
+  ShieldCheck, AlertCircle, Edit3, PackageCheck, Lock, User
 } from 'lucide-react';
 import { Purchase, PurchaseStatus, PurchasePaymentStatus } from '../types';
 import { useFabriqData } from '../../../../context/FabriqDataContext';
@@ -21,11 +21,22 @@ export default function PurchaseDetailsScreen({
   onBack,
   onUpdatePaymentStatus
 }: PurchaseDetailsScreenProps) {
-  const { updatePurchase } = useFabriqData();
+  const { updatePurchase, warehouses } = useFabriqData();
   const [currentPaymentStatus, setCurrentPaymentStatus] = useState<PurchasePaymentStatus>(purchase.paymentStatus);
   const [currentDeliveryStatus, setCurrentDeliveryStatus] = useState<PurchaseStatus>(purchase.status || 'Received');
   const [statusToast, setStatusToast] = useState<string>('');
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
+
+  const targetWarehouseName = (purchase.warehouse || purchase.warehouseLocation || '').trim().toLowerCase();
+  const matchedWarehouse = (warehouses || []).find(
+    (w) =>
+      w.name.trim().toLowerCase() === targetWarehouseName ||
+      w.code.trim().toLowerCase() === targetWarehouseName ||
+      (targetWarehouseName && w.name.trim().toLowerCase().includes(targetWarehouseName)) ||
+      (targetWarehouseName && targetWarehouseName.includes(w.name.trim().toLowerCase()))
+  );
+  const warehouseContactPerson = matchedWarehouse?.managerName || '';
+  const warehousePhone = matchedWarehouse?.phone || '';
 
   const { subtotal, gstRate, gstAmount, grandTotal } = calculatePurchaseTotals(purchase);
 
@@ -290,6 +301,12 @@ export default function PurchaseDetailsScreen({
               <span class="data-label">Warehouse Facility:</span>
               <span class="data-value">${purchase.warehouse || purchase.warehouseLocation || 'Default Godown'}</span>
             </div>
+            ${warehouseContactPerson ? `
+            <div class="data-row">
+              <span class="data-label">Facility Contact Person:</span>
+              <span class="data-value">${warehouseContactPerson}${warehousePhone ? ' (' + warehousePhone + ')' : ''}</span>
+            </div>
+            ` : ''}
             <div class="data-row">
               <span class="data-label">Supplier Invoice Ref:</span>
               <span class="data-value">${purchase.invoiceNumber || purchase.billNumber}</span>
@@ -515,6 +532,26 @@ export default function PurchaseDetailsScreen({
               <p className="font-bold text-gray-900 dark:text-neutral-100">
                 {purchase.warehouse || purchase.warehouseLocation || 'Default Godown'}
               </p>
+              {matchedWarehouse?.location && (
+                <p className="text-[10px] text-gray-500 dark:text-neutral-400 flex items-center gap-1">
+                  <MapPin className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
+                  <span>{matchedWarehouse.location}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-gray-400 dark:text-neutral-500 uppercase">Facility Contact Person</span>
+              <p className="font-bold text-gray-900 dark:text-neutral-100 flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                <span>{warehouseContactPerson || 'Facility Manager'}</span>
+              </p>
+              {warehousePhone && (
+                <p className="text-[10px] text-gray-500 dark:text-neutral-400 flex items-center gap-1">
+                  <Phone className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                  <span>{warehousePhone}</span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-0.5">
@@ -531,7 +568,7 @@ export default function PurchaseDetailsScreen({
               </p>
             </div>
 
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 sm:col-span-2">
               <span className="text-[10px] text-gray-400 dark:text-neutral-500 uppercase">Payment Mode</span>
               <p className="font-bold text-gray-900 dark:text-neutral-100">
                 {purchase.paymentMode || 'Bank Transfer'}

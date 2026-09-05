@@ -27,7 +27,7 @@ interface ProductionTabProps {
 }
 
 export default function ProductionTab({ orders }: ProductionTabProps) {
-  const { contractors, rawInventory, addProductionOrder, updateProductionOrder } = useFabriqData();
+  const { contractors, rawInventory, purchases, addProductionOrder, updateProductionOrder } = useFabriqData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
@@ -57,6 +57,32 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
   const selectedRawMaterial = useMemo(() => {
     return rawInventory.find(r => r.id === selectedRawInventoryId);
   }, [rawInventory, selectedRawInventoryId]);
+
+  const getRawItemInvoiceNo = (r: any) => {
+    if (!r) return 'N/A';
+    const p = purchases.find(
+      (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
+    );
+    return (
+      p?.invoiceNumber ||
+      p?.billNumber ||
+      (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
+      (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : 'N/A')
+    );
+  };
+
+  const getOrderInvoiceNo = (po: ProductionOrder) => {
+    const raw = rawInventory.find((r) => r.id === po.rawInventoryId);
+    const p = purchases.find(
+      (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
+    );
+    return (
+      p?.invoiceNumber ||
+      p?.billNumber ||
+      raw?.invoiceNumber ||
+      (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : 'N/A')
+    );
+  };
 
   // Generate next unique Challan Number
   const getNextChallanNumber = () => {
@@ -154,7 +180,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       stageHistory: [initialCuttingStage],
       // Pipeline linkage
       rawInventoryId: selectedRawInventoryId || undefined,
-      rawBatchId: selectedRawMaterial?.batchId || undefined,
+      rawBatchId: selectedRawMaterial ? getRawItemInvoiceNo(selectedRawMaterial) : undefined,
       fabricName: selectedRawMaterial?.fabricName || undefined,
       metersRequired: metersRequired || undefined,
       metersAllocated: metersRequired || undefined,
@@ -423,7 +449,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                     <div className="font-bold text-emerald-900 dark:text-emerald-300 mt-0.5">
                       {selectedOrder.metersAllocated || selectedOrder.metersRequired}m of {selectedOrder.fabricName}
                     </div>
-                    <div className="text-[10px] text-emerald-600">Batch ID: {selectedOrder.rawBatchId}</div>
+                    <div className="text-[10px] text-emerald-600">Invoice No: {getOrderInvoiceNo(selectedOrder)}</div>
                   </div>
                 )}
 
@@ -590,7 +616,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                   <option value="">— Select raw denim roll —</option>
                   {availableRawMaterials.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.fabricName} ({r.color}) — {r.availableMeters}m available — Batch: {r.batchId}
+                      {r.fabricName} — {r.availableMeters}m available — Inv: {getRawItemInvoiceNo(r)}
                     </option>
                   ))}
                 </select>

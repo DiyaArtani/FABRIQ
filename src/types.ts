@@ -9,9 +9,7 @@ export interface AppUser {
   email: string;
   phone: string;
   role: UserRole;
-  department?: string;
   status: UserStatus;
-  assignedWarehouse?: string;
   password?: string;
   pin?: string;
   createdAt: string;
@@ -81,6 +79,8 @@ export interface ProductionOrder {
   assignedTo?: string;
   startDate?: string;
   estimatedCompletionDate?: string;
+  estimatedCompletion?: string;
+  dueDate?: string;
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   status?: 'Draft' | 'Active' | 'Paused' | 'Completed' | 'Cancelled' | 'In Progress' | string;
   assignedWorkers?: string[];
@@ -126,6 +126,7 @@ export interface RawInventoryItem {
   id: string;
   purchaseId: string;
   batchId: string;
+  invoiceNumber?: string;
   fabricName: string;
   color: string;
   width: string;
@@ -198,7 +199,6 @@ export interface Supplier {
   id: string;
   code: string;
   name: string;
-  category?: string;
   contactPerson?: string;
   phone: string;
   email?: string;
@@ -207,8 +207,6 @@ export interface Supplier {
   accountNumber?: string;
   bankName?: string;
   ifscCode?: string;
-  paymentTerms?: string;
-  rating?: number;
   status: 'Active' | 'Blocked';
 }
 

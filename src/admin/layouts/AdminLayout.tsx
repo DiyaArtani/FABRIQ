@@ -13,21 +13,17 @@ import {
   Receipt,
   History,
   LogOut,
-  Smartphone,
   Sun,
   Moon,
-  ShieldCheck,
-  ChevronRight,
   Menu,
-  X,
-  Bell
+  X
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useFabriqData } from '../../context/FabriqDataContext';
 
 export const AdminLayout: React.FC = () => {
   const { adminUser, logoutAdmin } = useAdminAuth();
-  const { notifications, settings } = useFabriqData();
+  const { settings } = useFabriqData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -70,7 +66,6 @@ export const AdminLayout: React.FC = () => {
   ];
 
   const currentNav = navItems.find(item => location.pathname.startsWith(item.path)) || navItems[0];
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex font-sans antialiased">
@@ -90,18 +85,14 @@ export const AdminLayout: React.FC = () => {
       >
         {/* Brand Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-hanken font-extrabold text-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 dark:bg-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
               F
             </div>
-            <div>
-              <h1 className="font-hanken font-extrabold text-sm tracking-tight text-zinc-900 dark:text-white uppercase">
-                {settings.companyName || 'FABRIQ LEDGER'}
-              </h1>
-              <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                <ShieldCheck className="w-3 h-3" />
-                <span>ADMIN PORTAL v2.4</span>
-              </div>
+            <div className="flex flex-col">
+              <span className="font-hanken text-lg font-black tracking-tight text-gray-900 dark:text-zinc-50">
+                Fabriq <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">ERP</span>
+              </span>
             </div>
           </div>
           <button
@@ -152,15 +143,8 @@ export const AdminLayout: React.FC = () => {
           })}
         </nav>
 
-        {/* Bottom Switcher & Sign Out */}
+        {/* Bottom Sign Out */}
         <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 space-y-1">
-          <button
-            onClick={() => navigate('/app')}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-mono font-bold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/50 transition-colors cursor-pointer"
-          >
-            <Smartphone className="w-4 h-4" />
-            <span>Employee App</span>
-          </button>
           <button
             onClick={() => {
               logoutAdmin();
@@ -200,15 +184,6 @@ export const AdminLayout: React.FC = () => {
               title="Toggle Theme"
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-600" />}
-            </button>
-
-            {/* Launch Employee App Link */}
-            <button
-              onClick={() => navigate('/app')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-mono font-bold rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors cursor-pointer"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-sky-500" />
-              <span>Launch App</span>
             </button>
           </div>
         </header>

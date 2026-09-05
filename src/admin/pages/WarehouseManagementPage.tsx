@@ -128,7 +128,7 @@ export const WarehouseManagementPage: React.FC = () => {
       </div>
 
       {/* KPI Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
         <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
           <span className="text-[10px] text-zinc-500 uppercase block">Total Facilities</span>
           <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{warehouses.length}</span>
@@ -140,10 +140,6 @@ export const WarehouseManagementPage: React.FC = () => {
         <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
           <span className="text-[10px] text-zinc-500 uppercase block">Total Storage Capacity</span>
           <span className="text-lg font-bold text-sky-600 dark:text-sky-400">{totalCapacity.toLocaleString()} m</span>
-        </div>
-        <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-          <span className="text-[10px] text-zinc-500 uppercase block">Ready for Purchase POs</span>
-          <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{warehouses.length > 0 ? 'Synchronized' : '0 Added'}</span>
         </div>
       </div>
 

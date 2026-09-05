@@ -73,9 +73,7 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             email: fbUser.email,
             phone: fbUser.phoneNumber || '',
             role: 'Admin',
-            department: 'Management',
             status: 'Active',
-            assignedWarehouse: 'All Locations',
             createdAt: new Date().toISOString().substring(0, 10),
             lastLogin: new Date().toLocaleString()
           };
@@ -147,7 +145,6 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         phone: '',
         role: 'Admin',
         status: 'Active',
-        assignedWarehouse: 'All Locations',
         createdAt: new Date().toISOString().substring(0, 10),
         lastLogin: new Date().toLocaleString()
       };

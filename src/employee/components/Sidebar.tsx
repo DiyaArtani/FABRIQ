@@ -59,7 +59,6 @@ export default function Sidebar({
             <span className="font-hanken text-lg font-black tracking-tight text-gray-900 dark:text-zinc-50">
               Fabriq <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">ERP</span>
             </span>
-            <span className="text-[10px] text-gray-400 dark:text-neutral-500 font-mono -mt-1">v2.4.0-Production</span>
           </div>
         </div>
       </div>

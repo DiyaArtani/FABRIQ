@@ -275,7 +275,6 @@ export default function CreatePurchaseScreen({
         id: `sup-${Date.now()}`,
         code: `SUP-${String(Date.now()).slice(-4)}`,
         name: cleanName,
-
         contactPerson: cleanName,
         phone: supplierMobile.trim(),
         email: `${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '')}@supplier.com`,
@@ -284,8 +283,6 @@ export default function CreatePurchaseScreen({
         accountNumber: bankAccountNumber.trim() || undefined,
         bankName: bankName.trim() || undefined,
         ifscCode: bankIfscCode.trim() || undefined,
-        paymentTerms: 'Net 30',
-        rating: 5,
         status: 'Active'
       };
       addSupplier(newSupplierRecord);

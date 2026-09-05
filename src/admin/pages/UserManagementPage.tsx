@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Users,
   Plus,
   Search,
   UserCheck,
@@ -22,7 +21,7 @@ import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponent
 import { createFirebaseAuthUser } from '../../lib/firebase';
 
 export const UserManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, toggleUserStatus, deleteUser, warehouses, firebaseError } = useFabriqData();
+  const { users, addUser, updateUser, toggleUserStatus, deleteUser, firebaseError } = useFabriqData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
@@ -39,7 +38,6 @@ export const UserManagementPage: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('Employee');
-  const [formWarehouse, setFormWarehouse] = useState('All Locations');
   const [formPassword, setFormPassword] = useState('');
   const [formPin, setFormPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -70,7 +68,6 @@ export const UserManagementPage: React.FC = () => {
     setFormEmail('');
     setFormPhone('');
     setFormRole('Employee');
-    setFormWarehouse(warehouses[0]?.name || 'All Locations');
     setFormPassword('');
     setFormPin('');
     setShowPassword(false);
@@ -86,7 +83,6 @@ export const UserManagementPage: React.FC = () => {
     setFormPhone(u.phone);
     const role = u.role === 'Admin' ? 'Admin' : 'Employee';
     setFormRole(role);
-    setFormWarehouse(u.assignedWarehouse || 'All Locations');
     setFormPassword(u.password || (u.role === 'Admin' ? u.pin || '' : ''));
     setFormPin(u.pin || '1234');
     setShowPassword(false);
@@ -159,7 +155,6 @@ export const UserManagementPage: React.FC = () => {
         phone: formPhone,
         role: formRole,
         status: editingUser ? editingUser.status : 'Active',
-        assignedWarehouse: formWarehouse,
         createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
         ...(isAdmin
           ? { password: formPassword, pin: formPassword }
@@ -218,24 +213,17 @@ export const UserManagementPage: React.FC = () => {
       {/* Header & Title Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 mb-1">
-            <Users className="w-4 h-4" />
-            <span>EMPLOYEE ACCESS CONTROLS</span>
-          </div>
           <h1 className="font-hanken font-bold text-xl text-zinc-900 dark:text-zinc-100 tracking-tight">
-            User Account Management
+            User Management
           </h1>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">
-            Manage system employee accounts, assign roles, enable/disable logins, and control Mobile App credentials.
-          </p>
         </div>
 
         <button
           onClick={openCreateModal}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors shrink-0"
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>REGISTER USER ACCOUNT</span>
+          <span>ADD USER</span>
         </button>
       </div>
 
@@ -324,17 +312,19 @@ export const UserManagementPage: React.FC = () => {
                     </span>
                   </td>
                   <td className="p-3 font-mono text-[11px]">
-                    {u.role === 'Admin' ? (
-                      <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 font-mono font-bold text-purple-700 dark:text-purple-300 rounded inline-flex items-center gap-1.5">
-                        <Lock className="w-3 h-3 text-purple-500" />
-                        <span>Password Protected</span>
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 rounded inline-flex items-center gap-1.5">
-                        <Key className="w-3 h-3 text-emerald-500" />
-                        <span>PIN: {u.pin || '1234'}</span>
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {u.role === 'Admin' ? (
+                        <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 font-mono font-bold text-purple-700 dark:text-purple-300 rounded inline-flex items-center gap-1.5">
+                          <Lock className="w-3 h-3 text-purple-500" />
+                          <span>Password Protected</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 rounded inline-flex items-center gap-1.5">
+                          <Key className="w-3 h-3 text-emerald-500" />
+                          <span>PIN: {u.pin || '1234'}</span>
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3">
                     <Badge status={u.status} />
@@ -383,8 +373,8 @@ export const UserManagementPage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingUser ? `Edit User (${editingUser.employeeId})` : 'Register User Account'}
-        subtitle="Configures user account in Firebase Authentication and stores database profile."
+        title={editingUser ? `Edit User (${editingUser.employeeId})` : 'Add User'}
+        subtitle="Manage user account details, credentials and role permissions."
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
           {formError && (
@@ -535,7 +525,7 @@ export const UserManagementPage: React.FC = () => {
               {isSaving ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>CREATING IN FIREBASE...</span>
+                  <span>SAVING...</span>
                 </>
               ) : (
                 editingUser ? 'SAVE CHANGES' : 'CREATE ACCOUNT'

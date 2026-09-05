@@ -71,4 +71,46 @@ export async function createFirebaseAuthUser(
   return { uid };
 }
 
+import type { AppUser } from '../types';
+
+/**
+ * Iterates through a list of users and registers any missing user accounts
+ * directly into Firebase Authentication so all users reflect in the Firebase Console.
+ */
+export async function syncAllUsersToFirebaseAuth(usersList: AppUser[]): Promise<{
+  total: number;
+  created: number;
+  alreadyExisted: number;
+  failed: number;
+  errors: string[];
+}> {
+  let created = 0;
+  let alreadyExisted = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const u of usersList) {
+    const email = (u.email || '').trim();
+    if (!email || !email.includes('@')) continue;
+
+    // Determine password (Firebase Auth requires min 6 chars)
+    const rawPass = (u.password || u.pin || '123456').trim();
+    const authPass = rawPass.length >= 6 ? rawPass : rawPass.padEnd(6, '0');
+
+    try {
+      await createFirebaseAuthUser(email, authPass, u.name);
+      created++;
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        alreadyExisted++;
+      } else {
+        failed++;
+        errors.push(`${u.name} (${email}): ${err?.message || 'Error'}`);
+      }
+    }
+  }
+
+  return { total: usersList.length, created, alreadyExisted, failed, errors };
+}
+
 export { app, auth, db, storage, firebaseConfig };

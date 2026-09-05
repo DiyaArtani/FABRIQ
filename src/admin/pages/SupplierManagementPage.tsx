@@ -57,34 +57,24 @@ export const SupplierManagementPage: React.FC = () => {
         ...editingItem,
         code,
         name: name.trim(),
-        category: 'Fabrics',
-        contactPerson: name.trim(),
         phone: phone.trim(),
-        email: editingItem.email || `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@supplier.com`,
         address: address.trim() || 'N/A',
         gstin: gstin.trim() || undefined,
         accountNumber: accountNumber.trim() || undefined,
         bankName: bankName.trim() || undefined,
         ifscCode: ifscCode.trim() || undefined,
-        paymentTerms: editingItem.paymentTerms || 'Net 30',
-        rating: editingItem.rating || 5.0,
         status
       });
     } else {
       addSupplier({
         code,
         name: name.trim(),
-        category: 'Fabrics',
-        contactPerson: name.trim(),
         phone: phone.trim(),
-        email: `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@supplier.com`,
         address: address.trim() || 'N/A',
         gstin: gstin.trim() || undefined,
         accountNumber: accountNumber.trim() || undefined,
         bankName: bankName.trim() || undefined,
         ifscCode: ifscCode.trim() || undefined,
-        paymentTerms: 'Net 30',
-        rating: 5.0,
         status
       });
     }
@@ -125,8 +115,8 @@ export const SupplierManagementPage: React.FC = () => {
               <th className="p-3 font-bold">Code</th>
               <th className="p-3 font-bold">Supplier Name &amp; Address</th>
               <th className="p-3 font-bold">Mobile Number</th>
-              <th className="p-3 font-bold">GST No (GSTIN)</th>
-              <th className="p-3 font-bold">Bank Details (Remittance)</th>
+              <th className="p-3 font-bold">GST No</th>
+              <th className="p-3 font-bold">Bank Details</th>
               <th className="p-3 font-bold">Status</th>
               <th className="p-3 font-bold text-right">Actions</th>
             </tr>

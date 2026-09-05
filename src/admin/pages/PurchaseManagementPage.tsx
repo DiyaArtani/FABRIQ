@@ -209,17 +209,12 @@ export const PurchaseManagementPage: React.FC = () => {
       addSupplier({
         code: `SUP-${String(Date.now()).slice(-4)}`,
         name: cleanSupName,
-        category: 'Fabrics',
-        contactPerson: cleanSupName,
         phone: supplierPhone.trim(),
-        email: `${cleanSupName.toLowerCase().replace(/[^a-z0-9]/g, '')}@supplier.com`,
         address: supplierAddress.trim() || 'N/A',
         gstin: supplierGstin.trim() || undefined,
         accountNumber: bankAccountNumber.trim() || undefined,
         bankName: bankName.trim() || undefined,
         ifscCode: bankIfscCode.trim() || undefined,
-        paymentTerms: 'Net 30',
-        rating: 5,
         status: 'Active'
       });
     } else {
@@ -344,9 +339,6 @@ export const PurchaseManagementPage: React.FC = () => {
           <h1 className="font-hanken font-bold text-xl text-zinc-900 dark:text-zinc-100 tracking-tight">
             Purchase Ledger Management
           </h1>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">
-            Admin privilege module to view, edit, and manage raw fabric purchase bills.
-          </p>
         </div>
 
         <button
@@ -380,11 +372,10 @@ export const PurchaseManagementPage: React.FC = () => {
             <select
               value={warehouseFilter}
               onChange={(e) => setWarehouseFilter(e.target.value)}
-              className={`px-3 py-1.5 bg-zinc-50 dark:bg-zinc-950 border ${
-                warehouseFilter !== 'ALL'
-                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                  : 'border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200'
-              } text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer`}
+              className={`px-3 py-1.5 bg-zinc-50 dark:bg-zinc-950 border ${warehouseFilter !== 'ALL'
+                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
+                : 'border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200'
+                } text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer`}
             >
               <option value="ALL">All Warehouses {warehouseOptions.length > 0 ? `(${warehouseOptions.length})` : ''}</option>
               {warehouseOptions.length === 0 ? (
@@ -419,11 +410,11 @@ export const PurchaseManagementPage: React.FC = () => {
         <table className="w-full text-left text-xs font-mono border-collapse">
           <thead>
             <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              <th className="p-3 font-bold">Invoice #</th>
+              <th className="p-3 font-bold">Invoice no.</th>
               <th className="p-3 font-bold">Supplier</th>
-              <th className="p-3 font-bold">Fabric &amp; Godown</th>
-              <th className="p-3 font-bold">Meters &amp; Rate</th>
-              <th className="p-3 font-bold">Pricing Breakdown</th>
+              <th className="p-3 font-bold">Fabric</th>
+              <th className="p-3 font-bold">Meters</th>
+              <th className="p-3 font-bold">Pricing</th>
               <th className="p-3 font-bold">Delivery Status</th>
               <th className="p-3 font-bold">Payment</th>
               <th className="p-3 font-bold text-right">Actions</th>
@@ -451,17 +442,15 @@ export const PurchaseManagementPage: React.FC = () => {
                   </td>
                   <td className="p-3 text-zinc-700 dark:text-zinc-300">
                     <div className="font-bold">{p.fabricName}</div>
-                    <div className="text-[10px] text-zinc-500">{p.width || '58"'} | {p.warehouse || p.warehouseLocation || 'Warehouse'}</div>
+                    <div className="text-[10px] text-zinc-500">{p.width} | {p.warehouse}</div>
                   </td>
                   <td className="p-3 text-zinc-800 dark:text-zinc-200">
-                    {p.meters} m @ ₹{p.rate}/m
+                    <div className="font-bold">{p.meters}</div>
+                    <div className="text-[10px] text-zinc-500">{p.rate} /m</div>
                   </td>
                   <td className="p-3">
                     <div className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
                       ₹{p.totalAmount.toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-[10px] text-zinc-400">
-                      Subtotal: ₹{p.subtotal?.toLocaleString('en-IN') || (p.meters * p.rate).toLocaleString('en-IN')} + {p.gstRate || 5}% GST
                     </div>
                   </td>
                   <td className="p-3">
@@ -475,17 +464,17 @@ export const PurchaseManagementPage: React.FC = () => {
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openEditModal(p)}
-                        className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 rounded text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="p-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded cursor-pointer"
+                        title="Edit Purchase"
                       >
                         <Edit className="w-3.5 h-3.5" />
-                        <span>EDIT</span>
                       </button>
                       <button
                         onClick={() => setDeleteCandidate(p)}
-                        className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 rounded text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="p-1.5 border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 hover:bg-rose-100 rounded cursor-pointer"
+                        title="Delete Purchase"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>DELETE</span>
                       </button>
                     </div>
                   </td>
