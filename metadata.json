@@ -1,0 +1,6 @@
+{
+  "name": "Fabriq",
+  "description": "Garment production & ERP ledger with employee mobile app and desktop enterprise admin portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
