@@ -9,6 +9,7 @@ import {
 import { Purchase, PurchaseStatus, PurchasePaymentStatus } from '../types';
 import { useFabriqData } from '../../../../context/FabriqDataContext';
 import { calculatePurchaseTotals } from '../components/PurchaseUIComponents';
+import { PurchaseBillModal } from '../../../../components/PurchaseBillModal';
 
 interface PurchaseDetailsScreenProps {
   purchase: Purchase;
@@ -25,7 +26,7 @@ export default function PurchaseDetailsScreen({
   const [currentPaymentStatus, setCurrentPaymentStatus] = useState<PurchasePaymentStatus>(purchase.paymentStatus);
   const [currentDeliveryStatus, setCurrentDeliveryStatus] = useState<PurchaseStatus>(purchase.status || 'Received');
   const [statusToast, setStatusToast] = useState<string>('');
-  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState<boolean>(false);
 
   const targetWarehouseName = (purchase.warehouse || purchase.warehouseLocation || '').trim().toLowerCase();
   const matchedWarehouse = (warehouses || []).find(
@@ -84,314 +85,9 @@ export default function PurchaseDetailsScreen({
     setTimeout(() => setStatusToast(''), 3500);
   };
 
-  // Direct High-Fidelity Printable Invoice Generator
+  // Open unified printable Purchase Bill Modal
   const handlePrintInvoice = () => {
-    setIsPrinting(true);
-
-    const printWindow = window.open('', '_blank', 'width=850,height=1100');
-    if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups to generate and print invoice.');
-      setIsPrinting(false);
-      return;
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Invoice - ${purchase.billNumber}</title>
-        <style>
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: #18181b;
-            background: #fff;
-            padding: 24px;
-            font-size: 12px;
-            line-height: 1.5;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 2px solid #10b981;
-            padding-bottom: 16px;
-            margin-bottom: 20px;
-          }
-          .brand {
-            font-size: 22px;
-            font-weight: 900;
-            color: #047857;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-          }
-          .brand-sub {
-            font-size: 10px;
-            color: #71717a;
-            font-family: monospace;
-          }
-          .invoice-tag {
-            text-align: right;
-          }
-          .invoice-title {
-            font-size: 18px;
-            font-weight: 800;
-            color: #18181b;
-          }
-          .invoice-meta {
-            font-size: 11px;
-            color: #52525b;
-            font-family: monospace;
-          }
-          .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-          }
-          .card {
-            background: #f4f4f5;
-            border: 1px solid #e4e4e7;
-            border-radius: 8px;
-            padding: 14px;
-          }
-          .card-title {
-            font-size: 10px;
-            font-weight: 800;
-            color: #71717a;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            border-bottom: 1px solid #e4e4e7;
-            padding-bottom: 4px;
-          }
-          .data-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 4px;
-            font-size: 11px;
-          }
-          .data-label {
-            color: #71717a;
-          }
-          .data-value {
-            font-weight: 600;
-            color: #18181b;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-          }
-          th {
-            background: #f4f4f5;
-            color: #3f3f46;
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            text-align: left;
-            padding: 8px 12px;
-            border-top: 1px solid #e4e4e7;
-            border-bottom: 1px solid #e4e4e7;
-          }
-          td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #f4f4f5;
-            font-size: 11px;
-          }
-          .text-right {
-            text-align: right;
-          }
-          .total-box {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 24px;
-          }
-          .total-table {
-            width: 280px;
-          }
-          .total-table .row {
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 0;
-            font-size: 11px;
-          }
-          .total-table .grand-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-top: 2px solid #18181b;
-            font-size: 14px;
-            font-weight: 800;
-            color: #047857;
-          }
-          .footer {
-            border-top: 1px dashed #d4d4d8;
-            padding-top: 16px;
-            text-align: center;
-            font-size: 10px;
-            color: #a1a1aa;
-            font-family: monospace;
-          }
-          .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-          }
-          .badge-paid { background: #d1fae5; color: #065f46; }
-          .badge-pending { background: #fef3c7; color: #92400e; }
-          .badge-partial { background: #e0e7ff; color: #3730a3; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="brand">FABRIQ LEDGER</div>
-            <div class="brand-sub">Commercial Fabric Procurement & Inward Voucher</div>
-          </div>
-          <div class="invoice-tag">
-            <div class="invoice-title">PROCUREMENT INVOICE</div>
-            <div class="invoice-meta">BILL NO: <strong>${purchase.billNumber}</strong></div>
-            <div class="invoice-meta">DATE: ${purchase.purchaseDate}</div>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-title">Supplier / Mill Details</div>
-            <div class="data-row">
-              <span class="data-label">Vendor Name:</span>
-              <span class="data-value">${purchase.supplier.name}</span>
-            </div>
-            <div class="data-row">
-              <span class="data-label">Mobile:</span>
-              <span class="data-value">${purchase.supplier.phone || 'N/A'}</span>
-            </div>
-            <div class="data-row">
-              <span class="data-label">GSTIN:</span>
-              <span class="data-value">${purchase.supplier.gstin || 'N/A'}</span>
-            </div>
-            <div class="data-row">
-              <span class="data-label">Address:</span>
-              <span class="data-value">${purchase.supplier.address && purchase.supplier.address !== 'N/A' ? purchase.supplier.address : 'N/A'}</span>
-            </div>
-            ${purchase.supplier.bankName ? `
-            <div class="data-row" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e4e4e7;">
-              <span class="data-label">Bank Remittance:</span>
-              <span class="data-value">${purchase.supplier.bankName} (A/C: ${purchase.supplier.accountNumber || '-'})</span>
-            </div>
-            ` : ''}
-          </div>
-
-          <div class="card">
-            <div class="card-title">Warehouse & Inward Info</div>
-            <div class="data-row">
-              <span class="data-label">Warehouse Facility:</span>
-              <span class="data-value">${purchase.warehouse || purchase.warehouseLocation || 'Default Godown'}</span>
-            </div>
-            ${warehouseContactPerson ? `
-            <div class="data-row">
-              <span class="data-label">Facility Contact Person:</span>
-              <span class="data-value">${warehouseContactPerson}${warehousePhone ? ' (' + warehousePhone + ')' : ''}</span>
-            </div>
-            ` : ''}
-            <div class="data-row">
-              <span class="data-label">Supplier Invoice Ref:</span>
-              <span class="data-value">${purchase.invoiceNumber || purchase.billNumber}</span>
-            </div>
-            <div class="data-row">
-              <span class="data-label">Payment Mode:</span>
-              <span class="data-value">${purchase.paymentMode || 'Bank Transfer'}</span>
-            </div>
-            <div class="data-row">
-              <span class="data-label">Payment Status:</span>
-              <span class="badge badge-${currentPaymentStatus.toLowerCase()}">${currentPaymentStatus}</span>
-            </div>
-            ${purchase.remarks ? `
-            <div class="data-row" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e4e4e7;">
-              <span class="data-label">Remarks:</span>
-              <span class="data-value">${purchase.remarks}</span>
-            </div>
-            ` : ''}
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Description / Fabric Item</th>
-              <th>Width</th>
-              <th class="text-right">Quantity (Meters)</th>
-              <th class="text-right">Rate / Meter</th>
-              <th class="text-right">Total Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(purchase.items && purchase.items.length > 0 ? purchase.items : [{
-        fabricName: purchase.fabricName,
-        width: purchase.width || '58"',
-        meters: purchase.meters,
-        rate: purchase.rate,
-        amount: subtotal
-      }]).map(item => `
-              <tr>
-                <td><strong>${item.fabricName}</strong></td>
-                <td>${item.width || purchase.width || '58"'}</td>
-                <td class="text-right">${(item.meters || 0).toLocaleString()} m</td>
-                <td class="text-right">₹${(item.rate || 0).toFixed(2)}</td>
-                <td class="text-right font-bold">₹${((item.amount !== undefined ? item.amount : (item.meters * item.rate)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <div class="total-box">
-          <div class="total-table">
-            <div class="row">
-              <span class="data-label">Subtotal:</span>
-              <span class="data-value">₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="row">
-              <span class="data-label">GST (${gstRate}%):</span>
-              <span class="data-value">₹${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="grand-row">
-              <span>Grand Total:</span>
-              <span>₹${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="footer">
-          <div>This is a computer generated commercial procurement receipt issued via Fabriq ERP Ledger.</div>
-          <div>Printed on ${new Date().toLocaleString('en-IN')} • Document Reference: ${purchase.id}</div>
-        </div>
-
-        <script>
-          window.onload = function() {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    setIsPrinting(false);
+    setIsInvoiceModalOpen(true);
   };
 
   return (
@@ -775,13 +471,19 @@ export default function PurchaseDetailsScreen({
         <motion.button
           whileTap={{ scale: 0.96 }}
           onClick={handlePrintInvoice}
-          disabled={isPrinting}
           className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
         >
           <Printer className="w-4 h-4" />
-          <span>{isPrinting ? 'Preparing PDF...' : 'Print Invoice (Download PDF)'}</span>
+          <span>View &amp; Print Invoice</span>
         </motion.button>
       </div>
+
+      {/* Unified Purchase Invoice Modal */}
+      <PurchaseBillModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        purchase={purchase}
+      />
     </div>
   );
 }

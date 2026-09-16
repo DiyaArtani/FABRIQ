@@ -4,6 +4,7 @@ import { Truck, Plus, Edit, Trash2, Phone, MapPin, Building2, Landmark, CheckCir
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Supplier } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { sortLatest } from '../../utils/sortUtils';
 
 // Helper to generate next sequential Supplier ID
 const generateNextSupplierId = (list: Supplier[]) => {
@@ -102,9 +103,9 @@ export const SupplierManagementPage: React.FC = () => {
   };
 
   const filteredSuppliers = useMemo(() => {
-    if (!searchTerm.trim()) return suppliers;
+    if (!searchTerm.trim()) return sortLatest(suppliers);
     const term = searchTerm.toLowerCase();
-    return suppliers.filter(s => {
+    const list = suppliers.filter(s => {
       const sCode = (s.code || s.supplierId || s.id || '').toLowerCase();
       const sName = (s.name || '').toLowerCase();
       const sPhone = (s.phone || '').toLowerCase();
@@ -120,6 +121,7 @@ export const SupplierManagementPage: React.FC = () => {
         sBank.includes(term)
       );
     });
+    return sortLatest(list);
   }, [suppliers, searchTerm]);
 
   // Export Suppliers Directory as genuine Excel (.xlsx)

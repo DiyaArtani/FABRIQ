@@ -4,6 +4,7 @@ import { ShoppingBag, Plus, Search, Edit, Trash2, CheckCircle2, Building2, Landm
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Purchase, Supplier, PurchaseItem } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { sortLatest } from '../../utils/sortUtils';
 
 interface FormFabricItem {
   id: string;
@@ -380,50 +381,28 @@ export const PurchaseManagementPage: React.FC = () => {
   }, [warehouses]);
 
   const filteredPurchases = useMemo(() => {
-    return purchases
-      .filter((p) => {
-        const bill = p.billNumber || '';
-        const inv = p.invoiceNumber || '';
-        const supp = p.supplier?.name || '';
-        const fab = p.fabricName || '';
+    const list = purchases.filter((p) => {
+      const bill = p.billNumber || '';
+      const inv = p.invoiceNumber || '';
+      const supp = p.supplier?.name || '';
+      const fab = p.fabricName || '';
 
-        const matchesSearch =
-          bill.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          inv.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          supp.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          fab.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        bill.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        inv.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supp.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        fab.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+      const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
 
-        const pWarehouse = (p.warehouse || p.warehouseLocation || '').trim().toLowerCase();
-        const matchesWarehouse =
-          warehouseFilter === 'ALL' ||
-          pWarehouse === warehouseFilter.trim().toLowerCase();
+      const pWarehouse = (p.warehouse || p.warehouseLocation || '').trim().toLowerCase();
+      const matchesWarehouse =
+        warehouseFilter === 'ALL' ||
+        pWarehouse === warehouseFilter.trim().toLowerCase();
 
-        return matchesSearch && matchesStatus && matchesWarehouse;
-      })
-      .sort((a, b) => {
-        // Sort newest purchases first
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        if (timeA && timeB && timeB !== timeA) {
-          return timeB - timeA;
-        }
-
-        const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
-        const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
-        if (dateA && dateB && dateB !== dateA) {
-          return dateB - dateA;
-        }
-
-        const idTimeA = parseInt(a.id.replace(/\D/g, ''), 10) || 0;
-        const idTimeB = parseInt(b.id.replace(/\D/g, ''), 10) || 0;
-        if (idTimeA && idTimeB && idTimeB !== idTimeA) {
-          return idTimeB - idTimeA;
-        }
-
-        return (b.id || '').localeCompare(a.id || '');
-      });
+      return matchesSearch && matchesStatus && matchesWarehouse;
+    });
+    return sortLatest(list);
   }, [purchases, searchTerm, statusFilter, warehouseFilter]);
 
   // Export Presentable Purchase Ledger as genuine Excel (.xlsx)
@@ -613,7 +592,7 @@ export const PurchaseManagementPage: React.FC = () => {
         <table className="w-full text-left text-xs font-mono border-collapse">
           <thead>
             <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              <th className="p-3 font-bold">Invoice no.</th>
+              <th className="p-3 font-bold">Bill Number</th>
               <th className="p-3 font-bold">Supplier</th>
               <th className="p-3 font-bold">Fabric</th>
               <th className="p-3 font-bold">Meters</th>

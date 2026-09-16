@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Building2, Plus, Edit, Trash2, Phone, Mail, DollarSign, ShieldAlert } from 'lucide-react';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Customer } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { sortLatest } from '../../utils/sortUtils';
 
 // Helper to generate next sequential Customer ID
 const generateNextCustomerId = (list: Customer[]) => {
@@ -20,7 +21,7 @@ const generateNextCustomerId = (list: Customer[]) => {
 
 export const CustomerManagementPage: React.FC = () => {
   const { customers, addCustomer, updateCustomer, deleteCustomer } = useFabriqData();
-  const activeCustomers = customers || [];
+  const activeCustomers = useMemo(() => sortLatest(customers || []), [customers]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Customer | null>(null);

@@ -94,6 +94,7 @@ export interface ProductionOrder {
   metersAllocated?: number;
   producedItemName?: string;
   finishedInventoryCreated?: boolean;
+  warehouse?: string;
   createdAt?: string;
   createdBy?: string;
 }
@@ -126,6 +127,7 @@ export interface RawInventoryItem {
   id: string;
   purchaseId: string;
   batchId: string;
+  billNumber?: string;
   invoiceNumber?: string;
   fabricName: string;
   width?: string;
@@ -161,7 +163,7 @@ export interface FinishedInventoryItem {
   costPerUnit?: number;
   unitPrice?: number;
   sellingPrice?: number;
-  status: 'In Stock' | 'Low Stock' | 'Sold Out' | 'Available';
+  status: 'In Stock' | 'Low Stock' | 'Sold Out' | 'Out of Stock' | 'Available';
   createdAt: string;
 }
 
@@ -178,6 +180,7 @@ export interface Warehouse {
   managerName: string;
   phone: string;
   status: 'Active' | 'Maintenance' | 'Full';
+  createdAt?: string;
 }
 
 export interface Contractor {
@@ -192,6 +195,7 @@ export interface Contractor {
   rating: number;
   activeOrdersCount: number;
   status: 'Active' | 'Inactive';
+  createdAt?: string;
 }
 
 export interface Supplier {
@@ -208,6 +212,7 @@ export interface Supplier {
   bankName?: string;
   ifscCode?: string;
   status: 'Active' | 'Blocked';
+  createdAt?: string;
 }
 
 export interface Customer {
@@ -227,6 +232,7 @@ export interface Customer {
   paymentTerms: string;
   status: 'Active' | 'Inactive' | 'Blocked';
   ordersCount: number;
+  createdAt?: string;
 }
 
 export type PurchaseStatus = 'In Transit' | 'Received';

@@ -4,6 +4,7 @@ import { Warehouse as WarehouseIcon, Plus, Edit, Trash2, Phone, MapPin, Building
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Warehouse } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { sortLatest } from '../../utils/sortUtils';
 
 // Helper to generate next sequential Warehouse ID
 const generateNextWarehouseId = (list: Warehouse[]) => {
@@ -127,7 +128,7 @@ export const WarehouseManagementPage: React.FC = () => {
 
   // Filtered warehouses
   const filteredWarehouses = useMemo(() => {
-    return warehouses.filter(wh => {
+    const list = warehouses.filter(wh => {
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         wh.name.toLowerCase().includes(q) ||
@@ -138,6 +139,7 @@ export const WarehouseManagementPage: React.FC = () => {
       const matchesStatus = statusFilter === 'All' || wh.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
+    return sortLatest(list);
   }, [warehouses, searchQuery, statusFilter]);
 
   // Overall Totals
@@ -374,128 +376,162 @@ export const WarehouseManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Warehouses Table with Two Capacities */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono border-collapse">
+      {/* Warehouses Table (Fits 100% in screen frame with zero horizontal scrolling) */}
+      <div className="hidden md:block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs rounded-xl overflow-hidden">
+        <table className="w-full table-fixed text-left border-collapse">
           <thead>
-            <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              <th className="p-3 font-bold w-40 min-w-[140px]">Warehouse ID</th>
-              <th className="p-3 font-bold">Facility Name &amp; Address</th>
-              <th className="p-3 font-bold whitespace-nowrap">City / Location</th>
-              <th className="p-3 font-bold whitespace-nowrap">Raw Material Capacity</th>
-              <th className="p-3 font-bold whitespace-nowrap">Finished Goods Capacity</th>
-              <th className="p-3 font-bold">Supervisor / Manager</th>
-              <th className="p-3 font-bold">Status</th>
-              <th className="p-3 font-bold text-right">Actions</th>
+            <tr className="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider text-[11px] font-mono">
+              <th className="px-3 py-3 font-semibold w-[8%] text-left">WH ID</th>
+              <th className="px-3 py-3 font-semibold w-[17%] text-left">Facility &amp; Address</th>
+              <th className="px-3 py-3 font-semibold w-[14%] text-left">Location</th>
+              <th className="px-3 py-3 font-semibold w-[17%] text-left">Raw Material Storage</th>
+              <th className="px-3 py-3 font-semibold w-[17%] text-left">Finished Goods Storage</th>
+              <th className="px-3 py-3 font-semibold w-[11%] text-left">Supervisor</th>
+              <th className="px-3 py-3 font-semibold w-[8%] text-center">Status</th>
+              <th className="px-3 py-3 font-semibold w-[8%] text-right pr-4">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs">
             {filteredWarehouses.length > 0 ? (
               filteredWarehouses.map((wh, idx) => {
                 const { whRawMeters, whFinUnits, rawCap, finCap, rawPercent, finPercent } = getWarehouseMetrics(wh);
 
                 return (
-                  <tr key={`${wh.id}-${idx}`} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                    <td className="p-3 font-bold text-zinc-900 dark:text-zinc-100 font-mono w-40 min-w-[140px] whitespace-nowrap">
-                      {wh.code || wh.id}
-                    </td>
-                    <td className="p-3">
-                      <div className="font-bold text-zinc-900 dark:text-zinc-100 font-hanken text-sm">
-                        {wh.name}
-                      </div>
-                      <div className="text-[11px] text-zinc-500 truncate max-w-xs">{wh.address || 'Address not specified'}</div>
-                    </td>
-                    <td className="p-3 whitespace-nowrap">
-                      <span className="px-2.5 py-1 text-[11px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-sm inline-block">
-                        {wh.location}
+                  <tr key={`${wh.id}-${idx}`} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors">
+                    {/* Warehouse ID */}
+                    <td className="px-3 py-3.5 text-left">
+                      <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700/80 inline-block">
+                        {wh.code || wh.id}
                       </span>
                     </td>
 
+                    {/* Facility Name & Address */}
+                    <td className="px-3 py-3.5 text-left overflow-hidden">
+                      <div className="font-hanken font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate" title={wh.name}>
+                        {wh.name}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 truncate mt-0.5" title={wh.address || 'Address not specified'}>
+                        {wh.address || 'Address not specified'}
+                      </div>
+                    </td>
+
+                    {/* City / Location */}
+                    <td className="px-3 py-3.5 text-left overflow-hidden">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 font-medium truncate" title={wh.location}>
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="truncate">{wh.location}</span>
+                      </div>
+                    </td>
+
                     {/* Raw Material Capacity */}
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="px-3 py-3.5 text-left overflow-hidden">
                       {rawCap > 0 ? (
-                        <div className="space-y-1 font-mono">
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
-                              {rawCap.toLocaleString()} m
+                        <div className="space-y-1.5 pr-2">
+                          <div className="flex items-baseline justify-between text-xs">
+                            <span className="font-semibold text-zinc-900 dark:text-zinc-100 font-mono">
+                              {whRawMeters.toLocaleString()} <span className="text-[10px] text-zinc-500 font-normal">m</span>
                             </span>
-                            <span className="text-[10px] text-zinc-400 uppercase">Cap</span>
+                            <span className="text-[11px] text-zinc-400 font-mono">
+                              / {rawCap.toLocaleString()} m
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 font-semibold text-[10px]">
-                              {whRawMeters.toLocaleString()} m used
-                            </span>
-                            <span className={`text-[10px] font-medium ${rawPercent >= 90 ? 'text-rose-600 font-bold' : 'text-zinc-400'}`}>
-                              ({rawPercent}%)
+                          <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${rawPercent >= 90 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${Math.min(100, rawPercent)}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                            <span className="text-zinc-400">Utilization</span>
+                            <span className={`font-mono font-bold ${rawPercent >= 90 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {rawPercent}%
                             </span>
                           </div>
                         </div>
                       ) : whRawMeters > 0 ? (
-                        <div className="space-y-1 font-mono">
-                          <span className="text-zinc-400 text-xs">—</span>
-                          <div>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 font-semibold text-[10px]">
-                              {whRawMeters.toLocaleString()} m used
-                            </span>
-                          </div>
+                        <div>
+                          <span className="font-semibold text-xs text-emerald-600 dark:text-emerald-400 font-mono block">
+                            {whRawMeters.toLocaleString()} m
+                          </span>
+                          <span className="text-[10px] text-zinc-400 block">No cap set</span>
                         </div>
                       ) : (
-                        <span className="text-zinc-400 font-mono text-xs">—</span>
+                        <span className="text-zinc-400 text-xs">—</span>
                       )}
                     </td>
 
                     {/* Finished Goods Capacity */}
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="px-3 py-3.5 text-left overflow-hidden">
                       {finCap > 0 ? (
-                        <div className="space-y-1 font-mono">
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
-                              {finCap.toLocaleString()} pcs
+                        <div className="space-y-1.5 pr-2">
+                          <div className="flex items-baseline justify-between text-xs">
+                            <span className="font-semibold text-zinc-900 dark:text-zinc-100 font-mono">
+                              {whFinUnits.toLocaleString()} <span className="text-[10px] text-zinc-500 font-normal">pcs</span>
                             </span>
-                            <span className="text-[10px] text-zinc-400 uppercase">Cap</span>
+                            <span className="text-[11px] text-zinc-400 font-mono">
+                              / {finCap.toLocaleString()} pcs
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span className="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800/60 font-semibold text-[10px]">
-                              {whFinUnits.toLocaleString()} pcs used
-                            </span>
-                            <span className={`text-[10px] font-medium ${finPercent >= 90 ? 'text-rose-600 font-bold' : 'text-zinc-400'}`}>
-                              ({finPercent}%)
+                          <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${finPercent >= 90 ? 'bg-rose-500' : 'bg-sky-500'}`}
+                              style={{ width: `${Math.min(100, finPercent)}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                            <span className="text-zinc-400">Utilization</span>
+                            <span className={`font-mono font-bold ${finPercent >= 90 ? 'text-rose-600 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400'}`}>
+                              {finPercent}%
                             </span>
                           </div>
                         </div>
                       ) : whFinUnits > 0 ? (
-                        <div className="space-y-1 font-mono">
-                          <span className="text-zinc-400 text-xs">—</span>
-                          <div>
-                            <span className="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800/60 font-semibold text-[10px]">
-                              {whFinUnits.toLocaleString()} pcs used
-                            </span>
-                          </div>
+                        <div>
+                          <span className="font-semibold text-xs text-sky-600 dark:text-sky-400 font-mono block">
+                            {whFinUnits.toLocaleString()} pcs
+                          </span>
+                          <span className="text-[10px] text-zinc-400 block">No cap set</span>
                         </div>
                       ) : (
-                        <span className="text-zinc-400 font-mono text-xs">—</span>
+                        <span className="text-zinc-400 text-xs">—</span>
                       )}
                     </td>
 
-                    <td className="p-3 text-zinc-700 dark:text-zinc-300">
-                      <div>{wh.managerName || 'Unassigned'}</div>
-                      <div className="text-[10px] text-zinc-500">{wh.phone || 'No phone'}</div>
+                    {/* Supervisor / Manager */}
+                    <td className="px-3 py-3.5 text-left overflow-hidden">
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100 text-xs truncate" title={wh.managerName || 'Unassigned'}>
+                        {wh.managerName || 'Unassigned'}
+                      </div>
+                      {wh.phone ? (
+                        <div className="text-[11px] text-zinc-500 font-mono flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 text-zinc-400 shrink-0" />
+                          <span className="truncate">{wh.phone}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-400 italic mt-0.5">No phone</div>
+                      )}
                     </td>
-                    <td className="p-3">
+
+                    {/* Status */}
+                    <td className="px-3 py-3.5 text-center overflow-hidden">
                       <Badge status={wh.status} />
                     </td>
-                    <td className="p-3 text-right">
+
+                    {/* Actions */}
+                    <td className="px-3 py-3.5 text-right pr-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          type="button"
                           onClick={() => openEditModal(wh)}
-                          className="p-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded cursor-pointer"
+                          className="p-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer shadow-2xs"
                           title="Edit Facility"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeleteCandidate(wh)}
-                          className="p-1.5 border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 hover:bg-rose-100 rounded cursor-pointer"
+                          className="p-1.5 rounded-md border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer shadow-2xs"
                           title="Delete Facility"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -514,6 +550,91 @@ export const WarehouseManagementPage: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile / Narrow Screen View (Cards that never require horizontal scrolling) */}
+      <div className="block md:hidden space-y-3">
+        {filteredWarehouses.length > 0 ? (
+          filteredWarehouses.map((wh, idx) => {
+            const { whRawMeters, whFinUnits, rawCap, finCap, rawPercent, finPercent } = getWarehouseMetrics(wh);
+
+            return (
+              <div
+                key={`mobile-${wh.id}-${idx}`}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl shadow-xs space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                      {wh.code || wh.id}
+                    </span>
+                    <h3 className="font-hanken font-bold text-base text-zinc-900 dark:text-zinc-100 mt-1">
+                      {wh.name}
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                      {wh.location} • {wh.address || 'Address not specified'}
+                    </p>
+                  </div>
+                  <Badge status={wh.status} />
+                </div>
+
+                {/* Capacities Grid */}
+                <div className="grid grid-cols-2 gap-2 bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-lg text-xs font-mono">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-zinc-400 block uppercase font-bold">Raw Material</span>
+                    <span className="font-bold text-emerald-600 block">
+                      {whRawMeters.toLocaleString()}m {rawCap > 0 && <span className="text-zinc-400 font-normal">/ {rawCap.toLocaleString()}m</span>}
+                    </span>
+                    {rawCap > 0 && (
+                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, rawPercent)}%` }} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-zinc-400 block uppercase font-bold">Finished Goods</span>
+                    <span className="font-bold text-sky-600 block">
+                      {whFinUnits.toLocaleString()} pcs {finCap > 0 && <span className="text-zinc-400 font-normal">/ {finCap.toLocaleString()} pcs</span>}
+                    </span>
+                    {finCap > 0 && (
+                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                        <div className="bg-sky-500 h-full rounded-full" style={{ width: `${Math.min(100, finPercent)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="text-[11px]">
+                    <span className="text-zinc-400">Supervisor: </span>
+                    <strong className="text-zinc-700 dark:text-zinc-300">{wh.managerName || 'Unassigned'}</strong>
+                    {wh.phone && <span className="text-zinc-400 ml-1">({wh.phone})</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => openEditModal(wh)}
+                      className="px-2 py-1 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit className="w-3 h-3" /> Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteCandidate(wh)}
+                      className="px-2 py-1 border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 rounded text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="p-8 text-center text-zinc-500 font-mono bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+            {searchQuery ? `No facilities match "${searchQuery}".` : 'No warehouse facilities found.'}
+          </div>
+        )}
       </div>
 
       {/* Modal Form with Dual Capacities */}

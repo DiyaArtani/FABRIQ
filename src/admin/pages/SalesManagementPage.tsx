@@ -4,6 +4,7 @@ import { useFabriqData } from '../../context/FabriqDataContext';
 import { Invoice, SaleOrder, SaleLineItem, FinishedInventoryItem, Customer } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { TaxInvoiceModal } from '../components/TaxInvoiceModal';
+import { sortLatest } from '../../utils/sortUtils';
 
 type SalesTab = 'sales' | 'invoices';
 
@@ -271,23 +272,29 @@ export const SalesManagementPage: React.FC = () => {
     return activeCustomers.find(c => c.id === customerId) || null;
   };
 
-  // Filtered data
-  const filteredSales = sales.filter((s) => {
-    const term = searchTerm.toLowerCase();
-    const custName = getCustomerDisplayName(s.customerId, s.customerName).toLowerCase();
-    return (
-      (s.saleCode || '').toLowerCase().includes(term) ||
-      custName.includes(term)
-    );
-  });
+  // Filtered data (latest first)
+  const filteredSales = useMemo(() => {
+    const list = sales.filter((s) => {
+      const term = searchTerm.toLowerCase();
+      const custName = getCustomerDisplayName(s.customerId, s.customerName).toLowerCase();
+      return (
+        (s.saleCode || '').toLowerCase().includes(term) ||
+        custName.includes(term)
+      );
+    });
+    return sortLatest(list);
+  }, [sales, searchTerm, activeCustomers]);
 
-  const filteredInvoices = invoices.filter((inv) => {
-    const invCode = (inv.invoiceNumber || inv.invoiceCode || '').toLowerCase();
-    const custName = getCustomerDisplayName(inv.customerId, inv.customerName || inv.client).toLowerCase();
-    const matchesSearch = invCode.includes(searchTerm.toLowerCase()) || custName.includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredInvoices = useMemo(() => {
+    const list = invoices.filter((inv) => {
+      const invCode = (inv.invoiceNumber || inv.invoiceCode || '').toLowerCase();
+      const custName = getCustomerDisplayName(inv.customerId, inv.customerName || inv.client).toLowerCase();
+      const matchesSearch = invCode.includes(searchTerm.toLowerCase()) || custName.includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    return sortLatest(list);
+  }, [invoices, searchTerm, statusFilter, activeCustomers]);
 
   return (
     <div className="space-y-6">

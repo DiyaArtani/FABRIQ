@@ -4,6 +4,7 @@ import { Invoice, SaleOrder } from '../../types';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Search, Plus, CheckCircle, Clock, X, DollarSign, ArrowUpRight, TrendingUp, ShoppingCart, FileText, PackageCheck, Printer } from 'lucide-react';
 import { TaxInvoiceModal } from '../components/TaxInvoiceModal';
+import { sortLatest } from '../../utils/sortUtils';
 
 interface SalesTabProps {
   key?: string;
@@ -27,17 +28,17 @@ export default function SalesTab({ onAddInvoiceClick }: SalesTabProps) {
     .filter(inv => inv.status === 'Pending')
     .reduce((sum, current) => sum + current.amount, 0);
 
-  const filteredSales = sales.filter(s => {
+  const filteredSales = sortLatest(sales.filter(s => {
     const cust = s.customerName || '';
     const code = s.saleCode || '';
     return cust.toLowerCase().includes(searchQuery.toLowerCase()) || code.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  }));
 
-  const filteredInvoices = invoices.filter(inv => {
+  const filteredInvoices = sortLatest(invoices.filter(inv => {
     const client = inv.client || inv.customerName || '';
     const code = inv.invoiceCode || inv.invoiceNumber || '';
     return client.toLowerCase().includes(searchQuery.toLowerCase()) || code.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  }));
 
   return (
     <motion.div

@@ -20,6 +20,7 @@ import {
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { ProductionChallanModal } from '../components/ProductionChallanModal';
 import { AdvanceStageModal } from '../../admin/components/AdvanceStageModal';
+import { sortLatest } from '../../utils/sortUtils';
 
 interface ProductionTabProps {
   key?: string;
@@ -27,7 +28,7 @@ interface ProductionTabProps {
 }
 
 export default function ProductionTab({ orders }: ProductionTabProps) {
-  const { contractors, rawInventory, purchases, addProductionOrder, updateProductionOrder } = useFabriqData();
+  const { contractors, rawInventory, purchases, finishedInventory, addProductionOrder, updateProductionOrder } = useFabriqData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
@@ -49,9 +50,11 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
   const [selectedRawInventoryId, setSelectedRawInventoryId] = useState('');
   const [metersRequired, setMetersRequired] = useState(0);
 
-  // Available raw materials for dropdown
+  // Available raw materials for dropdown (excludes completely allocated fabric)
   const availableRawMaterials = useMemo(() => {
-    return rawInventory.filter(r => r.availableMeters > 0);
+    return rawInventory.filter(
+      r => r.availableMeters > 0 && r.status !== 'Depleted' && (r.totalMeters === 0 || r.allocatedMeters < r.totalMeters)
+    );
   }, [rawInventory]);
 
   const selectedRawMaterial = useMemo(() => {
@@ -64,8 +67,9 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
     );
     return (
-      p?.invoiceNumber ||
       p?.billNumber ||
+      r.billNumber ||
+      p?.invoiceNumber ||
       (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
       (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : 'N/A')
     );
@@ -77,8 +81,9 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
     );
     return (
-      p?.invoiceNumber ||
       p?.billNumber ||
+      raw?.billNumber ||
+      p?.invoiceNumber ||
       raw?.invoiceNumber ||
       (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : 'N/A')
     );
@@ -191,24 +196,27 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
     setIsCreateModalOpen(false);
   };
 
-  // Search and filter logic
-  const filteredOrders = orders.filter(order => {
-    const code = order.poCode || order.orderCode || '';
-    const ch = order.challanNumber || '';
-    const name = order.name || order.styleName || '';
-    const assigned = order.assignedTo || order.contractorName || '';
-    const stage = order.currentStage || order.stage || '';
+  // Search and filter logic (latest first)
+  const filteredOrders = useMemo(() => {
+    const list = orders.filter(order => {
+      const code = order.poCode || order.orderCode || '';
+      const ch = order.challanNumber || '';
+      const name = order.name || order.styleName || '';
+      const assigned = order.assignedTo || order.contractorName || '';
+      const stage = order.currentStage || order.stage || '';
 
-    const matchesSearch =
-      code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ch.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      assigned.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stage.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch =
+        code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ch.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        assigned.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        stage.toLowerCase().includes(searchQuery.toLowerCase());
 
-    if (filterStage === 'All') return matchesSearch;
-    return matchesSearch && (order.currentStage === filterStage || order.stage === filterStage);
-  });
+      if (filterStage === 'All') return matchesSearch;
+      return matchesSearch && (order.currentStage === filterStage || order.stage === filterStage);
+    });
+    return sortLatest(list);
+  }, [orders, searchQuery, filterStage]);
 
   const getStageIcon = (stage: string) => {
     switch (stage) {
@@ -449,7 +457,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                     <div className="font-bold text-emerald-900 dark:text-emerald-300 mt-0.5">
                       {selectedOrder.metersAllocated || selectedOrder.metersRequired}m of {selectedOrder.fabricName}
                     </div>
-                    <div className="text-[10px] text-emerald-600">Invoice No: {getOrderInvoiceNo(selectedOrder)}</div>
+                    <div className="text-[10px] text-emerald-600">Bill No: {getOrderInvoiceNo(selectedOrder)}</div>
                   </div>
                 )}
 
@@ -589,17 +597,29 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-500">
-                  Garment Style / Item Name
-                </label>
+                <div className="flex justify-between items-center text-[10px]">
+                  <label className="uppercase font-bold text-gray-500">
+                    Garment Style / Item Name
+                  </label>
+                  <span className="text-emerald-600 font-medium">Same name adds to product inventory</span>
+                </div>
                 <input
                   type="text"
                   required
                   value={styleName}
                   onChange={(e) => setStyleName(e.target.value)}
                   placeholder="e.g. Slim Fit Indigo Denim Jeans"
+                  list="emp-existing-product-styles"
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none font-bold"
                 />
+                <datalist id="emp-existing-product-styles">
+                  {Array.from(new Set([
+                    ...finishedInventory.map(f => f.productName || f.itemName || f.styleName).filter(Boolean),
+                    ...orders.map(p => p.productName || p.styleName || p.name).filter(Boolean)
+                  ])).map((name, idx) => (
+                    <option key={idx} value={name as string} />
+                  ))}
+                </datalist>
               </div>
 
               {/* Raw Material Selection */}
@@ -616,7 +636,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                   <option value="">— Select raw denim roll —</option>
                   {availableRawMaterials.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.fabricName} — {r.availableMeters}m available — Inv: {getRawItemInvoiceNo(r)}
+                      {r.fabricName} — {r.availableMeters}m available — Bill No: {getRawItemInvoiceNo(r)}
                     </option>
                   ))}
                 </select>

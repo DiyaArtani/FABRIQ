@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { HardHat, Plus, Edit, Trash2, Phone, Mail, MapPin, Star } from 'lucide-react';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Contractor } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
+import { sortLatest } from '../../utils/sortUtils';
 
 // Helper to generate next sequential Contractor ID
 const generateNextContractorId = (list: Contractor[]) => {
@@ -20,6 +21,7 @@ const generateNextContractorId = (list: Contractor[]) => {
 
 export const ContractorManagementPage: React.FC = () => {
   const { contractors, addContractor, updateContractor, deleteContractor } = useFabriqData();
+  const sortedContractors = useMemo(() => sortLatest(contractors || []), [contractors]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Contractor | null>(null);
@@ -128,7 +130,7 @@ export const ContractorManagementPage: React.FC = () => {
 
       {/* Contractors Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {contractors.map((ctr, idx) => (
+        {sortedContractors.map((ctr, idx) => (
           <div
             key={`${ctr.id}-${idx}`}
             className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-2xs space-y-4 hover:border-emerald-500/50 transition-colors flex flex-col justify-between"

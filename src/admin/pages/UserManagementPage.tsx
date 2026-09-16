@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -19,6 +19,7 @@ import { useFabriqData } from '../../context/FabriqDataContext';
 import { AppUser, UserRole, UserStatus } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { createFirebaseAuthUser } from '../../lib/firebase';
+import { sortLatest } from '../../utils/sortUtils';
 
 export const UserManagementPage: React.FC = () => {
   const { users, addUser, updateUser, toggleUserStatus, deleteUser, firebaseError } = useFabriqData();
@@ -179,21 +180,24 @@ export const UserManagementPage: React.FC = () => {
   };
 
   // Filtering
-  const filteredUsers = users.filter((u) => {
-    const name = u.name || '';
-    const email = u.email || '';
-    const empId = u.employeeId || '';
+  const filteredUsers = useMemo(() => {
+    const list = users.filter((u) => {
+      const name = u.name || '';
+      const email = u.email || '';
+      const empId = u.employeeId || '';
 
-    const matchesSearch =
-      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      empId.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        empId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
-    const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
+      const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+      const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
 
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+    return sortLatest(list);
+  }, [users, searchTerm, roleFilter, statusFilter]);
 
   return (
     <div className="space-y-6">

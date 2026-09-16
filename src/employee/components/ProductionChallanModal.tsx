@@ -257,7 +257,7 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                   <strong className="text-zinc-900 dark:text-zinc-100">{order.fabricName || 'Raw Denim'}</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-400 block text-[10px]">SUPPLIER INVOICE NO:</span>
+                  <span className="text-zinc-400 block text-[10px]">BILL / INVOICE NO:</span>
                   <strong className="text-zinc-900 dark:text-zinc-100">{order.rawBatchId || 'N/A'}</strong>
                 </div>
                 <div>

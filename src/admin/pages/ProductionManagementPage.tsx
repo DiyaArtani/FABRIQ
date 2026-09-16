@@ -23,6 +23,7 @@ import { ProductionOrder, ProductionStage, StageHistoryEntry } from '../../types
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { ProductionChallanModal } from '../components/ProductionChallanModal';
 import { AdvanceStageModal } from '../components/AdvanceStageModal';
+import { sortLatest } from '../../utils/sortUtils';
 
 export const ProductionManagementPage: React.FC = () => {
   const {
@@ -30,6 +31,7 @@ export const ProductionManagementPage: React.FC = () => {
     contractors,
     rawInventory,
     purchases,
+    finishedInventory,
     addProductionOrder,
     updateProductionOrder,
     deleteProductionOrder
@@ -62,9 +64,11 @@ export const ProductionManagementPage: React.FC = () => {
   const [metersRequired, setMetersRequired] = useState(0);
   const [producedItemName, setProducedItemName] = useState('');
 
-  // Available raw materials for dropdown
+  // Available raw materials for dropdown (excludes completely allocated fabric)
   const availableRawMaterials = useMemo(() => {
-    return rawInventory.filter(r => r.availableMeters > 0);
+    return rawInventory.filter(
+      r => r.availableMeters > 0 && r.status !== 'Depleted' && (r.totalMeters === 0 || r.allocatedMeters < r.totalMeters)
+    );
   }, [rawInventory]);
 
   const selectedRawMaterial = useMemo(() => {
@@ -77,8 +81,9 @@ export const ProductionManagementPage: React.FC = () => {
       (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
     );
     return (
-      p?.invoiceNumber ||
       p?.billNumber ||
+      r.billNumber ||
+      p?.invoiceNumber ||
       (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
       (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : 'N/A')
     );
@@ -90,8 +95,9 @@ export const ProductionManagementPage: React.FC = () => {
       (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
     );
     return (
-      p?.invoiceNumber ||
       p?.billNumber ||
+      raw?.billNumber ||
+      p?.invoiceNumber ||
       raw?.invoiceNumber ||
       (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : 'N/A')
     );
@@ -246,23 +252,26 @@ export const ProductionManagementPage: React.FC = () => {
   };
 
   // Filtered orders
-  const filteredOrders = productionOrders.filter((po) => {
-    const code = po.orderCode || po.poCode || '';
-    const ch = po.challanNumber || '';
-    const style = po.styleName || po.name || '';
-    const contractor = po.contractorName || po.assignedTo || '';
-    const stageVal = po.currentStage || po.stage || '';
+  const filteredOrders = useMemo(() => {
+    const list = productionOrders.filter((po) => {
+      const code = po.orderCode || po.poCode || '';
+      const ch = po.challanNumber || '';
+      const style = po.styleName || po.name || '';
+      const contractor = po.contractorName || po.assignedTo || '';
+      const stageVal = po.currentStage || po.stage || '';
 
-    const matchesSearch =
-      code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ch.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      style.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contractor.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ch.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        style.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contractor.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStage = stageFilter === 'ALL' || stageVal === stageFilter;
+      const matchesStage = stageFilter === 'ALL' || stageVal === stageFilter;
 
-    return matchesSearch && matchesStage;
-  });
+      return matchesSearch && matchesStage;
+    });
+    return sortLatest(list);
+  }, [productionOrders, searchTerm, stageFilter]);
 
   // KPI Metrics
   const activeCutting = productionOrders.filter(o => (o.currentStage === 'Cutting' || o.stage === 'Cutting') && o.overallStatus !== 'Completed').length;
@@ -451,7 +460,7 @@ export const ProductionManagementPage: React.FC = () => {
                         <div>
                           <div className="text-zinc-800 dark:text-zinc-200 text-[11px] font-bold">{po.fabricName || 'Raw Fabric'}</div>
                           <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">{po.metersAllocated || po.metersRequired}m allocated</div>
-                          <div className="text-[9px] text-zinc-400">Inv: {getOrderInvoiceNo(po)}</div>
+                          <div className="text-[9px] text-zinc-400">Bill No: {getOrderInvoiceNo(po)}</div>
                         </div>
                       ) : (
                         <span className="text-[10px] text-zinc-400">Direct In-House Stock</span>
@@ -601,15 +610,27 @@ export const ProductionManagementPage: React.FC = () => {
 
             {/* Garment Style Name */}
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500">Garment Style / Product Name</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold uppercase text-zinc-500">Garment Style / Product Name</label>
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">Same product name combines inventory</span>
+              </div>
               <input
                 type="text"
                 required
                 value={styleName}
                 onChange={(e) => setStyleName(e.target.value)}
                 placeholder="e.g. Slim Fit Indigo Denim Jeans"
+                list="existing-product-styles"
                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
               />
+              <datalist id="existing-product-styles">
+                {Array.from(new Set([
+                  ...finishedInventory.map(f => f.productName || f.itemName || f.styleName).filter(Boolean),
+                  ...productionOrders.map(p => p.productName || p.styleName || p.name).filter(Boolean)
+                ])).map((name, idx) => (
+                  <option key={idx} value={name as string} />
+                ))}
+              </datalist>
             </div>
 
             {/* === PIPELINE: Raw Material Selection === */}
@@ -627,7 +648,7 @@ export const ProductionManagementPage: React.FC = () => {
                   <option value="">— Select raw denim from inventory —</option>
                   {availableRawMaterials.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.fabricName} — {r.availableMeters}m available — Inv: {getRawItemInvoiceNo(r)} — {r.warehouse}
+                      {r.fabricName} — {r.availableMeters}m available — Bill No: {getRawItemInvoiceNo(r)} — {r.warehouse}
                     </option>
                   ))}
                 </select>
@@ -646,7 +667,7 @@ export const ProductionManagementPage: React.FC = () => {
                     Meters to Allocate (Available: {selectedRawMaterial.availableMeters}m)
                   </label>
                   <span className="text-[10px] font-mono text-emerald-600">
-                    Cost: ₹{selectedRawMaterial.costPerMeter}/m | Inv: {getRawItemInvoiceNo(selectedRawMaterial)}
+                    Cost: ₹{selectedRawMaterial.costPerMeter}/m | Bill No: {getRawItemInvoiceNo(selectedRawMaterial)}
                   </span>
                 </div>
                 <input

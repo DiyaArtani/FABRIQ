@@ -45,6 +45,7 @@ import {
   removeDocument,
   seedFirestoreDatabase
 } from '../services/firebaseService';
+import { sortLatest } from '../utils/sortUtils';
 
 interface FabriqDataContextType {
   // Firebase state flag & error tracking
@@ -133,17 +134,17 @@ interface FabriqDataContextType {
 const FabriqDataContext = createContext<FabriqDataContextType | undefined>(undefined);
 
 export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>(INITIAL_PRODUCTION_ORDERS);
-  const [stockItems, setStockItems] = useState<StockItem[]>(INITIAL_STOCK_ITEMS);
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
-  const [users, setUsers] = useState<AppUser[]>(INITIAL_USERS);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(INITIAL_WAREHOUSES);
-  const [contractors, setContractors] = useState<Contractor[]>(INITIAL_CONTRACTORS);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(INITIAL_SUPPLIERS);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
+  const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>(() => sortLatest(INITIAL_PRODUCTION_ORDERS));
+  const [stockItems, setStockItems] = useState<StockItem[]>(() => sortLatest(INITIAL_STOCK_ITEMS));
+  const [invoices, setInvoices] = useState<Invoice[]>(() => sortLatest(INITIAL_INVOICES));
+  const [notifications, setNotifications] = useState<Notification[]>(() => sortLatest(INITIAL_NOTIFICATIONS));
+  const [users, setUsers] = useState<AppUser[]>(() => sortLatest(INITIAL_USERS));
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => sortLatest(INITIAL_WAREHOUSES));
+  const [contractors, setContractors] = useState<Contractor[]>(() => sortLatest(INITIAL_CONTRACTORS));
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => sortLatest(INITIAL_SUPPLIERS));
+  const [customers, setCustomers] = useState<Customer[]>(() => sortLatest(INITIAL_CUSTOMERS));
+  const [purchases, setPurchases] = useState<Purchase[]>(() => sortLatest(MOCK_PURCHASES));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => sortLatest(INITIAL_AUDIT_LOGS));
   const [settings, setSettings] = useState<SystemSettings>({
     companyName: '',
     gstin: '',
@@ -168,27 +169,27 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       subscribeCollection<AppUser>(
         COLLECTIONS.USERS,
         (items) => {
-          setUsers(items);
+          setUsers(sortLatest(items));
           setFirebaseError(null);
         },
         (err) => setFirebaseError(err?.message || 'Firebase permission error on users collection')
       ),
-      subscribeCollection<Warehouse>(COLLECTIONS.WAREHOUSES, (items) => { setWarehouses(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<Contractor>(COLLECTIONS.CONTRACTORS, (items) => { setContractors(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<Supplier>(COLLECTIONS.SUPPLIERS, (items) => { setSuppliers(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<Customer>(COLLECTIONS.CUSTOMERS, (items) => { setCustomers(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<Purchase>(COLLECTIONS.PURCHASES, (items) => { setPurchases(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<ProductionOrder>(COLLECTIONS.PRODUCTION_ORDERS, (items) => { setProductionOrders(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<StockItem>(COLLECTIONS.STOCK_ITEMS, (items) => { setStockItems(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<Invoice>(COLLECTIONS.INVOICES, (items) => { setInvoices(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<AuditLog>(COLLECTIONS.AUDIT_LOGS, (items) => { setAuditLogs(items); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Warehouse>(COLLECTIONS.WAREHOUSES, (items) => { setWarehouses(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Contractor>(COLLECTIONS.CONTRACTORS, (items) => { setContractors(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Supplier>(COLLECTIONS.SUPPLIERS, (items) => { setSuppliers(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Customer>(COLLECTIONS.CUSTOMERS, (items) => { setCustomers(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Purchase>(COLLECTIONS.PURCHASES, (items) => { setPurchases(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<ProductionOrder>(COLLECTIONS.PRODUCTION_ORDERS, (items) => { setProductionOrders(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<StockItem>(COLLECTIONS.STOCK_ITEMS, (items) => { setStockItems(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<Invoice>(COLLECTIONS.INVOICES, (items) => { setInvoices(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<AuditLog>(COLLECTIONS.AUDIT_LOGS, (items) => { setAuditLogs(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
       subscribeDocument<SystemSettings>(COLLECTIONS.SETTINGS, 'global', (data) => {
         if (data) setSettings(prev => ({ ...prev, ...data, firebaseConfigured: true }));
       }),
       // Connected Pipeline collections
-      subscribeCollection<RawInventoryItem>(COLLECTIONS.RAW_INVENTORY, (items) => { setRawInventory(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<FinishedInventoryItem>(COLLECTIONS.FINISHED_INVENTORY, (items) => { setFinishedInventory(items); }, (err) => setFirebaseError(err?.message)),
-      subscribeCollection<SaleOrder>(COLLECTIONS.SALES, (items) => { setSales(items); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<RawInventoryItem>(COLLECTIONS.RAW_INVENTORY, (items) => { setRawInventory(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<FinishedInventoryItem>(COLLECTIONS.FINISHED_INVENTORY, (items) => { setFinishedInventory(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
+      subscribeCollection<SaleOrder>(COLLECTIONS.SALES, (items) => { setSales(sortLatest(items)); }, (err) => setFirebaseError(err?.message)),
     ];
 
     return () => {
@@ -250,7 +251,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       pin: userData.pin || '1234'
     };
 
-    setUsers(prev => [newU, ...prev.filter(u => u.id !== newU.id)]);
+    setUsers(prev => sortLatest([newU, ...prev.filter(u => u.id !== newU.id)]));
     if (isFirebaseConfigured) {
       saveDocument(COLLECTIONS.USERS, newU).catch(console.error);
       if (newU.email) {
@@ -296,8 +297,13 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addWarehouse = (data: Omit<Warehouse, 'id'> & { id?: string }) => {
     const newId = (data as any).id?.trim() || `w-${Date.now()}`;
     const cleanCode = data.code?.trim() || newId;
-    const newW: Warehouse = { ...data, id: newId, code: cleanCode };
-    setWarehouses(prev => [newW, ...prev]);
+    const newW: Warehouse = {
+      ...data,
+      id: newId,
+      code: cleanCode,
+      createdAt: (data as any).createdAt || new Date().toISOString()
+    };
+    setWarehouses(prev => sortLatest([newW, ...prev]));
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.WAREHOUSES, newW, newId).catch(console.error);
     addAuditLog('Admin', 'WAREHOUSE_CREATE', 'Master Data', `Added new warehouse facility ${newW.name} (${cleanCode})`);
   };
@@ -321,8 +327,13 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addContractor = (data: Omit<Contractor, 'id'> & { id?: string }) => {
     const newId = (data as any).id?.trim() || `c-${Date.now()}`;
     const cleanCode = data.code?.trim() || newId;
-    const newC: Contractor = { ...data, id: newId, code: cleanCode };
-    setContractors(prev => [newC, ...prev]);
+    const newC: Contractor = {
+      ...data,
+      id: newId,
+      code: cleanCode,
+      createdAt: (data as any).createdAt || new Date().toISOString()
+    };
+    setContractors(prev => sortLatest([newC, ...prev]));
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.CONTRACTORS, newC, newId).catch(console.error);
     addAuditLog('Admin', 'CONTRACTOR_CREATE', 'Master Data', `Registered new contractor ${newC.name} (${cleanCode})`);
   };
@@ -346,8 +357,14 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addSupplier = (data: Omit<Supplier, 'id'> & { id?: string }) => {
     const newId = data.id?.trim() || `sup-${Date.now()}`;
     const cleanCode = data.code?.trim() || data.supplierId?.trim() || newId;
-    const newS: Supplier = { ...data, id: newId, code: cleanCode, supplierId: cleanCode };
-    setSuppliers(prev => [newS, ...prev]);
+    const newS: Supplier = {
+      ...data,
+      id: newId,
+      code: cleanCode,
+      supplierId: cleanCode,
+      createdAt: (data as any).createdAt || new Date().toISOString()
+    };
+    setSuppliers(prev => sortLatest([newS, ...prev]));
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.SUPPLIERS, newS, newId).catch(console.error);
     addAuditLog('Admin', 'SUPPLIER_CREATE', 'Master Data', `Onboarded new supplier ${newS.name} (${cleanCode})`);
   };
@@ -373,8 +390,13 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addCustomer = (data: Omit<Customer, 'id'> & { id?: string }) => {
     const newId = (data as any).id?.trim() || `cust-${Date.now()}`;
     const cleanCode = data.code?.trim() || newId;
-    const newCust: Customer = { ...data, id: newId, code: cleanCode };
-    setCustomers(prev => [newCust, ...prev]);
+    const newCust: Customer = {
+      ...data,
+      id: newId,
+      code: cleanCode,
+      createdAt: (data as any).createdAt || new Date().toISOString()
+    };
+    setCustomers(prev => sortLatest([newCust, ...prev]));
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.CUSTOMERS, newCust, newId).catch(console.error);
     addAuditLog('Admin', 'CUSTOMER_CREATE', 'Master Data', `Added customer account ${newCust.name} (${cleanCode})`);
   };
@@ -399,7 +421,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // =====================================================================
   // Helper to compile RawInventoryItems from a Purchase (one per fabric item)
   const buildRawItemsFromPurchase = (p: Purchase): RawInventoryItem[] => {
-    const invoiceNo = p.invoiceNumber || p.billNumber || `INV-${Date.now().toString().slice(-4)}`;
+    const billOrInv = p.billNumber || p.invoiceNumber || `BILL-${Date.now().toString().slice(-4)}`;
     const warehouse = p.warehouse;
     const supplierName = p.supplier?.name || 'Supplier';
 
@@ -411,8 +433,9 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return {
           id: rawInvId,
           purchaseId: p.id,
-          batchId: invoiceNo,
-          invoiceNumber: invoiceNo,
+          batchId: billOrInv,
+          billNumber: p.billNumber || billOrInv,
+          invoiceNumber: billOrInv,
           fabricName: item.fabricName || 'Raw Fabric',
           width: item.width,
           supplierName,
@@ -432,8 +455,9 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return [{
       id: `rinv-${p.id}`,
       purchaseId: p.id,
-      batchId: invoiceNo,
-      invoiceNumber: invoiceNo,
+      batchId: billOrInv,
+      billNumber: p.billNumber || billOrInv,
+      invoiceNumber: billOrInv,
       fabricName: p.fabricName || 'Raw Fabric',
       width: p.width,
       supplierName,
@@ -639,24 +663,77 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
 
+    // If order was created already in Finished Goods / Completed stage
+    let finItemToAdd: FinishedInventoryItem | null = null;
+    if (newO.currentStage === 'Finished Goods' || newO.status === 'Completed') {
+      const goodQty = plannedQty;
+      const targetProductName = (newO.productName || newO.producedItemName || newO.styleName || newO.name || 'Finished Denim Jeans').trim();
+      const normTarget = targetProductName.toLowerCase();
+      const existingProduct = finishedInventory.find(
+        f => (f.productName || f.itemName || '').trim().toLowerCase() === normTarget
+      );
+
+      if (existingProduct) {
+        const newProduced = (Number(existingProduct.totalProduced ?? existingProduct.unitsProduced ?? 0)) + goodQty;
+        const newAvailable = (Number(existingProduct.availableQuantity ?? existingProduct.unitsAvailable ?? 0)) + goodQty;
+        finItemToAdd = {
+          ...existingProduct,
+          totalProduced: newProduced,
+          availableQuantity: newAvailable,
+          unitsProduced: newProduced,
+          unitsAvailable: newAvailable,
+          status: newAvailable > 0 ? (newAvailable < 20 ? 'Low Stock' : 'In Stock') : 'Sold Out',
+          productionOrderId: existingProduct.productionOrderId && !existingProduct.productionOrderId.includes(poId)
+            ? `${existingProduct.productionOrderId}, ${poId}`
+            : existingProduct.productionOrderId || poId,
+          challanNumber: existingProduct.challanNumber && newO.challanNumber && !existingProduct.challanNumber.includes(newO.challanNumber)
+            ? `${existingProduct.challanNumber}, ${newO.challanNumber}`
+            : existingProduct.challanNumber || newO.challanNumber,
+          warehouse: newO.warehouse || existingProduct.warehouse || 'Finished Goods Godown'
+        };
+        setFinishedInventory(prev => prev.map(f => f.id === existingProduct.id ? finItemToAdd! : f));
+      } else {
+        const finId = `finv-${Date.now()}`;
+        finItemToAdd = {
+          id: finId,
+          productionOrderId: poId,
+          challanNumber: newO.challanNumber,
+          productName: targetProductName,
+          styleName: newO.styleName || newO.name || 'Standard Style',
+          totalProduced: goodQty,
+          availableQuantity: goodQty,
+          unitsProduced: goodQty,
+          unitsAvailable: goodQty,
+          soldQuantity: 0,
+          unitPrice: 1200,
+          warehouse: newO.warehouse || 'Finished Goods Godown',
+          status: goodQty > 0 ? 'In Stock' : 'Sold Out',
+          createdAt: new Date().toISOString()
+        };
+        setFinishedInventory(prev => [finItemToAdd!, ...prev.filter(f => f.id !== finId)]);
+      }
+    }
+
     if (isFirebaseConfigured && db) {
+      const batch = writeBatch(db);
+      const poRef = doc(db, COLLECTIONS.PRODUCTION_ORDERS, poId);
+      batch.set(poRef, JSON.parse(JSON.stringify(newO)));
       if (rawItemToUpdate) {
-        const batch = writeBatch(db);
-        const poRef = doc(db, COLLECTIONS.PRODUCTION_ORDERS, poId);
-        batch.set(poRef, JSON.parse(JSON.stringify(newO)));
         const rawRef = doc(db, COLLECTIONS.RAW_INVENTORY, rawItemToUpdate.id);
         batch.update(rawRef, {
           availableMeters: rawItemToUpdate.availableMeters,
           allocatedMeters: rawItemToUpdate.allocatedMeters,
           status: rawItemToUpdate.status
         });
-        batch.commit().catch(err => {
-          console.error('Firebase error creating production order + deducting raw inventory:', err);
-          setFirebaseError(err?.message || 'Error deducting raw stock');
-        });
-      } else {
-        saveDocument(COLLECTIONS.PRODUCTION_ORDERS, newO).catch(console.error);
       }
+      if (finItemToAdd) {
+        const finRef = doc(db, COLLECTIONS.FINISHED_INVENTORY, finItemToAdd.id);
+        batch.set(finRef, JSON.parse(JSON.stringify(finItemToAdd)), { merge: true });
+      }
+      batch.commit().catch(err => {
+        console.error('Firebase error creating production order:', err);
+        setFirebaseError(err?.message || 'Error saving production order');
+      });
     }
 
     addAuditLog('Admin', 'PRODUCTION_CREATE', 'Production Management', `Created production order ${newO.orderCode || newO.poCode} (Challan: ${newO.challanNumber}, Style: ${newO.styleName || newO.name})${data.rawInventoryId ? ` — deducted ${data.metersAllocated}m from Raw Stock` : ''}`);
@@ -675,22 +752,57 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     if (shouldCreateFinished) {
-      const finId = `finv-${Date.now()}`;
-      const goodQty = data.finalQuantity || data.completedQuantity || data.completed || data.quantity || data.total || data.plannedQuantity || 0;
-      finItem = {
-        id: finId,
-        productionOrderId: data.id,
-        challanNumber: data.challanNumber,
-        productName: data.productName || data.producedItemName || data.styleName || data.name || 'Finished Denim Jeans',
-        styleName: data.styleName || data.name || 'Standard Style',
-        totalProduced: goodQty,
-        availableQuantity: goodQty,
-        soldQuantity: 0,
-        unitPrice: 1200, // Standard unit price
-        warehouse: 'Finished Goods Godown',
-        status: goodQty > 0 ? 'Available' : 'Sold Out',
-        createdAt: new Date().toISOString()
-      };
+      const goodQty = Number(data.finalQuantity || data.completedQuantity || data.completed || data.quantity || data.total || data.plannedQuantity || 0);
+      const targetProductName = (data.productName || data.producedItemName || data.styleName || data.name || 'Finished Denim Jeans').trim();
+
+      // Check if finished product with the same product name already exists (case-insensitive)
+      const existingProduct = finishedInventory.find(
+        f => (f.productName || f.itemName || '').trim().toLowerCase() === targetProductName.toLowerCase()
+      );
+
+      if (existingProduct) {
+        // ADD inventory to the SAME product
+        const newProduced = (Number(existingProduct.totalProduced ?? existingProduct.unitsProduced ?? 0)) + goodQty;
+        const newAvailable = (Number(existingProduct.availableQuantity ?? existingProduct.unitsAvailable ?? 0)) + goodQty;
+
+        finItem = {
+          ...existingProduct,
+          totalProduced: newProduced,
+          availableQuantity: newAvailable,
+          unitsProduced: newProduced,
+          unitsAvailable: newAvailable,
+          status: newAvailable > 0 ? (newAvailable < 20 ? 'Low Stock' : 'In Stock') : 'Sold Out',
+          productionOrderId: existingProduct.productionOrderId && !existingProduct.productionOrderId.includes(data.id)
+            ? `${existingProduct.productionOrderId}, ${data.id}`
+            : existingProduct.productionOrderId || data.id,
+          challanNumber: existingProduct.challanNumber && data.challanNumber && !existingProduct.challanNumber.includes(data.challanNumber)
+            ? `${existingProduct.challanNumber}, ${data.challanNumber}`
+            : existingProduct.challanNumber || data.challanNumber,
+          warehouse: data.warehouse || existingProduct.warehouse || 'Finished Goods Godown'
+        };
+
+        setFinishedInventory(prev => prev.map(f => f.id === existingProduct.id ? finItem! : f));
+      } else {
+        const finId = `finv-${Date.now()}`;
+        finItem = {
+          id: finId,
+          productionOrderId: data.id,
+          challanNumber: data.challanNumber,
+          productName: targetProductName,
+          styleName: data.styleName || data.name || 'Standard Style',
+          totalProduced: goodQty,
+          availableQuantity: goodQty,
+          unitsProduced: goodQty,
+          unitsAvailable: goodQty,
+          soldQuantity: 0,
+          unitPrice: 1200, // Standard unit price
+          warehouse: data.warehouse || 'Finished Goods Godown',
+          status: goodQty > 0 ? 'In Stock' : 'Sold Out',
+          createdAt: new Date().toISOString()
+        };
+
+        setFinishedInventory(prev => [finItem!, ...prev.filter(f => f.id !== finId)]);
+      }
 
       orderToSave = {
         ...orderToSave,
@@ -704,8 +816,6 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         finalQuantity: goodQty
       };
 
-      // Update local state immediately
-      setFinishedInventory(prev => [finItem!, ...prev.filter(f => f.productionOrderId !== data.id)]);
       setProductionOrders(prev => prev.map(o => o.id === data.id ? orderToSave : o));
     } else {
       setProductionOrders(prev => prev.map(o => o.id === data.id ? orderToSave : o));
@@ -796,21 +906,41 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     // Deduct finished inventory locally
-    setFinishedInventory(prev => prev.map(f => {
-      const match = saleData.items.find(item => item.finishedInventoryId === f.id);
-      if (match) {
-        const newAvail = Math.max(0, f.availableQuantity - match.quantity);
-        const newSold = f.soldQuantity + match.quantity;
-        const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low' : 'Available');
-        return {
-          ...f,
-          availableQuantity: newAvail,
-          soldQuantity: newSold,
-          status: newStatus as FinishedInventoryItem['status']
-        };
-      }
-      return f;
-    }));
+    setFinishedInventory(prev => {
+      const remainingToDeduct = new Map<string, number>();
+      saleData.items.forEach(it => {
+        const key = (it.productName || '').trim().toLowerCase();
+        if (key) {
+          remainingToDeduct.set(key, (remainingToDeduct.get(key) || 0) + it.quantity);
+        }
+      });
+
+      return prev.map(f => {
+        const byId = saleData.items.find(it => it.finishedInventoryId === f.id);
+        const key = (f.productName || f.itemName || '').trim().toLowerCase();
+        const qtyToDeduct = byId ? byId.quantity : (remainingToDeduct.get(key) || 0);
+
+        if (qtyToDeduct > 0) {
+          const avail = f.availableQuantity ?? f.unitsAvailable ?? 0;
+          const deduct = Math.min(avail, qtyToDeduct);
+          const newAvail = Math.max(0, avail - deduct);
+          const newSold = (f.soldQuantity ?? f.unitsSold ?? 0) + deduct;
+          if (!byId) {
+            remainingToDeduct.set(key, Math.max(0, qtyToDeduct - deduct));
+          }
+          const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low Stock' : 'In Stock');
+          return {
+            ...f,
+            availableQuantity: newAvail,
+            unitsAvailable: newAvail,
+            soldQuantity: newSold,
+            unitsSold: newSold,
+            status: newStatus as FinishedInventoryItem['status']
+          };
+        }
+        return f;
+      });
+    });
 
     // Update sales and invoices locally
     setSales(prev => [newSale, ...prev]);
@@ -826,11 +956,11 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       batch.set(invRef, JSON.parse(JSON.stringify(newInvoice)));
 
       for (const lineItem of saleData.items) {
-        const finItem = finishedInventory.find(f => f.id === lineItem.finishedInventoryId);
+        const finItem = finishedInventory.find(f => f.id === lineItem.finishedInventoryId || ((f.productName || f.itemName || '').trim().toLowerCase() === (lineItem.productName || '').trim().toLowerCase()));
         if (finItem) {
-          const newAvail = Math.max(0, finItem.availableQuantity - lineItem.quantity);
-          const newSold = finItem.soldQuantity + lineItem.quantity;
-          const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low' : 'Available');
+          const newAvail = Math.max(0, (finItem.availableQuantity || 0) - lineItem.quantity);
+          const newSold = (finItem.soldQuantity || 0) + lineItem.quantity;
+          const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low Stock' : 'In Stock');
           const finRef = doc(db, COLLECTIONS.FINISHED_INVENTORY, finItem.id);
           batch.update(finRef, {
             availableQuantity: newAvail,
@@ -958,40 +1088,82 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Automatically enrich raw inventory and production orders with true Supplier Invoice Numbers from linked purchases
   const enrichedRawInventory = useMemo(() => {
-    return rawInventory.map((r) => {
+    const list = rawInventory.map((r) => {
       const p = purchases.find(
         (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
       );
-      const trueInvoice =
-        p?.invoiceNumber ||
+      const trueBill =
         p?.billNumber ||
+        r.billNumber ||
         (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
+        p?.invoiceNumber ||
         (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : '');
       return {
         ...r,
-        invoiceNumber: trueInvoice || r.invoiceNumber || (p?.billNumber || r.batchId),
-        batchId: trueInvoice || r.batchId
+        billNumber: trueBill || r.billNumber || p?.billNumber,
+        invoiceNumber: trueBill || r.invoiceNumber || (p?.billNumber || r.batchId),
+        batchId: trueBill || r.batchId
       };
     });
+    return sortLatest(list);
   }, [rawInventory, purchases]);
 
   const enrichedProductionOrders = useMemo(() => {
-    return productionOrders.map((po) => {
+    const list = productionOrders.map((po) => {
       const raw = rawInventory.find((r) => r.id === po.rawInventoryId);
       const p = purchases.find(
         (item) => item.id === raw?.purchaseId || item.invoiceNumber === po.rawBatchId || item.billNumber === po.rawBatchId
       );
-      const trueInvoice =
-        p?.invoiceNumber ||
+      const trueBill =
         p?.billNumber ||
-        raw?.invoiceNumber ||
+        raw?.billNumber ||
+        (raw?.invoiceNumber && !raw?.invoiceNumber.startsWith('DF-2026-') ? raw?.invoiceNumber : '') ||
+        p?.invoiceNumber ||
         (po.rawBatchId && !po.rawBatchId.startsWith('DF-2026-') ? po.rawBatchId : '');
       return {
         ...po,
-        rawBatchId: trueInvoice || po.rawBatchId
+        rawBatchId: trueBill || po.rawBatchId
       };
     });
+    return sortLatest(list);
   }, [productionOrders, rawInventory, purchases]);
+
+  const consolidatedFinishedInventory = useMemo(() => {
+    const map = new Map<string, FinishedInventoryItem>();
+    finishedInventory.forEach(item => {
+      const key = (item.productName || item.itemName || 'Standard Apparel Item').trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, { ...item });
+      } else {
+        const existing = map.get(key)!;
+        const addProduced = Number(item.totalProduced ?? item.unitsProduced ?? 0);
+        const addAvailable = Number(item.availableQuantity ?? item.unitsAvailable ?? 0);
+        const addSold = Number(item.soldQuantity ?? item.unitsSold ?? 0);
+
+        const newProduced = (Number(existing.totalProduced ?? existing.unitsProduced ?? 0)) + addProduced;
+        const newAvailable = (Number(existing.availableQuantity ?? existing.unitsAvailable ?? 0)) + addAvailable;
+        const newSold = (Number(existing.soldQuantity ?? existing.unitsSold ?? 0)) + addSold;
+
+        map.set(key, {
+          ...existing,
+          totalProduced: newProduced,
+          availableQuantity: newAvailable,
+          soldQuantity: newSold,
+          unitsProduced: newProduced,
+          unitsAvailable: newAvailable,
+          unitsSold: newSold,
+          status: newAvailable > 0 ? (newAvailable < 20 ? 'Low Stock' : 'In Stock') : 'Sold Out',
+          productionOrderId: existing.productionOrderId && item.productionOrderId && !existing.productionOrderId.includes(item.productionOrderId)
+            ? `${existing.productionOrderId}, ${item.productionOrderId}`
+            : existing.productionOrderId || item.productionOrderId,
+          challanNumber: existing.challanNumber && item.challanNumber && !existing.challanNumber.includes(item.challanNumber)
+            ? `${existing.challanNumber}, ${item.challanNumber}`
+            : existing.challanNumber || item.challanNumber
+        });
+      }
+    });
+    return sortLatest(Array.from(map.values()));
+  }, [finishedInventory]);
 
   return (
     <FabriqDataContext.Provider
@@ -1012,7 +1184,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         auditLogs,
         settings,
         rawInventory: enrichedRawInventory,
-        finishedInventory,
+        finishedInventory: consolidatedFinishedInventory,
         sales,
         addUser,
         updateUser,

@@ -1,30 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { RawInventoryItem, FinishedInventoryItem } from '../../types';
-import { Search, MapPin, Package, Layers, Factory, ArrowRight, ShieldCheck, Edit3, X, SlidersHorizontal } from 'lucide-react';
+import { Search, MapPin, Package, Layers, Factory, ArrowRight, ShieldCheck, Edit3, X, SlidersHorizontal, Building2 } from 'lucide-react';
+import { sortLatest } from '../../utils/sortUtils';
 
 export default function InventoryTab() {
-  const { rawInventory, finishedInventory, purchases } = useFabriqData();
+  const { rawInventory, finishedInventory, purchases, warehouses } = useFabriqData();
   const [activeTab, setActiveTab] = useState<'raw' | 'finished'>('raw');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLocation, setFilterLocation] = useState<string>('All');
+
+  // Godowns strictly sourced from database warehouses collection (no hardcoded/derived strings)
+  const godownList = useMemo(() => {
+    const names: string[] = (warehouses || [])
+      .map((w) => w.name?.trim())
+      .filter((name): name is string => Boolean(name));
+    return Array.from(new Set<string>(names)).sort((a: string, b: string) => a.localeCompare(b));
+  }, [warehouses]);
 
   const getRawInvoice = (item: RawInventoryItem) => {
     const p = purchases.find(
       (pur) => pur.id === item.purchaseId || pur.billNumber === item.purchaseId || pur.invoiceNumber === item.purchaseId
     );
     return (
-      p?.invoiceNumber ||
       p?.billNumber ||
+      item.billNumber ||
+      p?.invoiceNumber ||
       (item.invoiceNumber && !item.invoiceNumber.startsWith('DF-2026-') ? item.invoiceNumber : '') ||
       (item.batchId && !item.batchId.startsWith('DF-2026-') ? item.batchId : 'N/A')
     );
   };
 
-  // Filter logic for Raw Inventory (Exclude completely used raw materials)
-  const filteredRaw = rawInventory.filter(item => {
-    if (item.availableMeters <= 0 || item.status === 'Depleted') return false;
+  // Condition for raw fabric that is active (excludes depleted or completely allocated fabric)
+  const isRawActive = (item: RawInventoryItem) => {
+    const available = Number(item.availableMeters) || 0;
+    const total = Number(item.totalMeters) || 0;
+    const allocated = Number(item.allocatedMeters) || 0;
+    if (available <= 0) return false;
+    if (item.status === 'Depleted') return false;
+    if (total > 0 && allocated >= total) return false;
+    return true;
+  };
+
+  // Condition for finished goods that are active (excludes sold out or out of stock items)
+  const isFinishedActive = (item: FinishedInventoryItem) => {
+    const available = Number(item.availableQuantity ?? item.unitsAvailable ?? 0);
+    const total = Number(item.totalProduced ?? item.unitsProduced ?? 0);
+    const sold = Number(item.soldQuantity ?? item.unitsSold ?? 0);
+    if (available <= 0) return false;
+    if (item.status === 'Sold Out' || item.status === 'Out of Stock') return false;
+    if (total > 0 && sold >= total) return false;
+    return true;
+  };
+
+  // Filter logic for Raw Inventory (Exclude completely used or completely allocated raw materials, latest first)
+  const filteredRaw = sortLatest(rawInventory.filter(item => {
+    if (!isRawActive(item)) return false;
 
     const name = item.fabricName || '';
     const color = item.color || '';
@@ -42,10 +74,12 @@ export default function InventoryTab() {
     const matchesLocation = filterLocation === 'All' || loc === filterLocation || loc.includes(filterLocation);
 
     return matchesSearch && matchesLocation;
-  });
+  }));
 
-  // Filter logic for Finished Inventory
-  const filteredFinished = finishedInventory.filter(item => {
+  // Filter logic for Finished Inventory (Exclude sold out products, latest first)
+  const filteredFinished = sortLatest(finishedInventory.filter(item => {
+    if (!isFinishedActive(item)) return false;
+
     const name = item.productName || '';
     const style = item.styleName || '';
     const po = item.productionOrderId || '';
@@ -60,7 +94,7 @@ export default function InventoryTab() {
     const matchesLocation = filterLocation === 'All' || loc === filterLocation || loc.includes(filterLocation);
 
     return matchesSearch && matchesLocation;
-  });
+  }));
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -79,8 +113,8 @@ export default function InventoryTab() {
     }
   };
 
-  const totalRawMeters = rawInventory.reduce((sum, r) => sum + r.availableMeters, 0);
-  const totalFinishedPcs = finishedInventory.reduce((sum, f) => sum + f.availableQuantity, 0);
+  const totalRawMeters = rawInventory.filter(isRawActive).reduce((sum, r) => sum + r.availableMeters, 0);
+  const totalFinishedPcs = finishedInventory.filter(isFinishedActive).reduce((sum, f) => sum + (f.availableQuantity || 0), 0);
 
   return (
     <motion.div
@@ -115,7 +149,7 @@ export default function InventoryTab() {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          Raw Materials ({rawInventory.length})
+          Raw Materials ({rawInventory.filter(isRawActive).length})
         </button>
         <button
           onClick={() => setActiveTab('finished')}
@@ -126,21 +160,44 @@ export default function InventoryTab() {
           }`}
         >
           <Factory className="w-3.5 h-3.5" />
-          Finished Goods ({finishedInventory.length})
+          Finished Goods ({finishedInventory.filter(isFinishedActive).length})
         </button>
       </div>
 
       {/* Filter and search bar controls */}
-      <section className="mb-4 space-y-2">
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-neutral-500 w-4 h-4 group-hover:text-emerald-600 transition-colors" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 pl-10 pr-4 bg-white dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none text-xs text-gray-900 dark:text-neutral-100 placeholder:text-gray-400 shadow-sm"
-            placeholder={activeTab === 'raw' ? "Search raw denim, batches, suppliers..." : "Search finished shirts, jeans, POs..."}
-            type="text"
-          />
+      <section className="mb-4">
+        {/* Search Bar + Godown Dropdown */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 group">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-neutral-500 w-4 h-4 group-hover:text-emerald-600 transition-colors" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-11 pl-10 pr-4 bg-white dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none text-xs text-gray-900 dark:text-neutral-100 placeholder:text-gray-400 shadow-sm"
+              placeholder={activeTab === 'raw' ? "Search raw fabric, bill no, batches, suppliers..." : "Search finished shirts, jeans, POs..."}
+              type="text"
+            />
+          </div>
+
+          {/* Godown Select Dropdown (Strictly sourced from database warehouses) */}
+          <div className="relative shrink-0 sm:w-52">
+            <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400 w-4 h-4 pointer-events-none" />
+            <select
+              value={filterLocation}
+              onChange={(e) => setFilterLocation(e.target.value)}
+              className="w-full h-11 pl-10 pr-8 bg-white dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-geist font-medium text-gray-800 dark:text-neutral-200 outline-none cursor-pointer shadow-sm appearance-none"
+            >
+              <option value="All">All Godowns ({warehouses.length})</option>
+              {godownList.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 text-[10px]">
+              ▼
+            </div>
+          </div>
         </div>
       </section>
 
@@ -162,7 +219,7 @@ export default function InventoryTab() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">Invoice: {getRawInvoice(r)}</span>
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">Bill No: {getRawInvoice(r)}</span>
                     </div>
                     <h3 className="font-hanken font-bold text-sm text-gray-900 dark:text-neutral-100 mt-0.5">
                       {r.fabricName}
@@ -190,7 +247,10 @@ export default function InventoryTab() {
                 </div>
 
                 <div className="flex justify-between items-center text-[10px] text-gray-400 pt-1 border-t border-gray-50 dark:border-neutral-800">
-                  <span>Location: {r.warehouse}</span>
+                  <span className="flex items-center gap-1 font-medium text-gray-700 dark:text-neutral-300">
+                    <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    Godown: {r.warehouse || 'Unassigned'}
+                  </span>
                   <span>Cost: ₹{r.costPerMeter}/m</span>
                 </div>
               </div>
@@ -243,7 +303,10 @@ export default function InventoryTab() {
                 </div>
 
                 <div className="flex justify-between items-center text-[10px] text-gray-400 pt-1 border-t border-gray-50 dark:border-neutral-800">
-                  <span>Warehouse: {f.warehouse}</span>
+                  <span className="flex items-center gap-1 font-medium text-gray-700 dark:text-neutral-300">
+                    <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    Godown: {f.warehouse || 'Unassigned'}
+                  </span>
                   <span className="font-bold text-emerald-600">Selling Price: ₹{f.unitPrice}/pc</span>
                 </div>
               </div>

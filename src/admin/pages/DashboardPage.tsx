@@ -44,20 +44,20 @@ export const DashboardPage: React.FC = () => {
   const activeOrders = productionOrders.filter(o => o.status !== 'Completed');
   const activeOrdersCount = activeOrders.length;
   
-  const totalStockUnits = stockItems.reduce((acc, curr) => acc + curr.availableUnits, 0);
-  const totalStockValue = stockItems.reduce((acc, curr) => acc + (curr.availableUnits * curr.costPrice), 0);
+  const totalStockUnits = stockItems.reduce((acc, curr) => acc + (curr.availableUnits || 0), 0);
+  const totalStockValue = stockItems.reduce((acc, curr) => acc + ((curr.availableUnits || 0) * (curr.costPrice || 0)), 0);
   const lowStockCount = stockItems.filter(s => s.status === 'Low Stock' || s.status === 'Out of Stock').length;
 
-  const totalPurchasesAmount = purchases.reduce((acc, curr) => acc + curr.totalAmount, 0);
-  const totalInvoicedAmount = invoices.reduce((acc, curr) => acc + curr.amount, 0);
+  const totalPurchasesAmount = purchases.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
+  const totalInvoicedAmount = invoices.reduce((acc, curr) => acc + (curr.amount || 0), 0);
   const pendingInvoicesAmount = invoices
     .filter(i => i.status === 'Pending' || i.status === 'Overdue')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .reduce((acc, curr) => acc + (curr.amount || 0), 0);
   const collectedRevenueAmount = invoices
     .filter(i => i.status === 'Paid')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
-  const totalProductionUnits = productionOrders.reduce((acc, curr) => acc + curr.quantity, 0);
+  const totalProductionUnits = productionOrders.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
 
   // Production Stage Breakdown
   const stageStats = {
@@ -88,16 +88,18 @@ export const DashboardPage: React.FC = () => {
       ['Godown Name', 'Stored SKUs', 'Current Units', 'Capacity Units', 'Estimated Asset Value (INR)'],
       ...warehouses.map(wh => {
         const whItems = stockItems.filter(s => s.warehouse === wh.name);
-        const val = whItems.reduce((acc, c) => acc + (c.availableUnits * c.costPrice), 0);
-        return [wh.name, whItems.length, wh.currentUnits, wh.capacityUnits, val];
+        const val = whItems.reduce((acc, c) => acc + ((c.availableUnits || 0) * (c.costPrice || 0)), 0);
+        const curUnits = Number(wh.currentUnits || 0);
+        const capUnits = Number(wh.capacityUnits || wh.finishedGoodsCapacityUnits || 0);
+        return [wh.name, whItems.length, curUnits, capUnits, val];
       }),
       [],
       ['=== CONTRACTOR PERFORMANCE ==='],
       ['Contractor Name', 'Specialty', 'Active Orders', 'Total Production Pcs', 'Rating'],
       ...contractors.map(ctr => {
         const ctrOrders = productionOrders.filter(p => p.contractorName === ctr.name);
-        const pcs = ctrOrders.reduce((acc, c) => acc + c.quantity, 0);
-        return [ctr.name, ctr.specialty, ctrOrders.filter(o => o.status !== 'Completed').length, pcs, ctr.rating];
+        const pcs = ctrOrders.reduce((acc, c) => acc + (c.quantity || 0), 0);
+        return [ctr.name, ctr.specialty, ctrOrders.filter(o => o.status !== 'Completed').length, pcs, ctr.rating || 5];
       })
     ];
 
@@ -307,8 +309,10 @@ export const DashboardPage: React.FC = () => {
             ) : (
               warehouses.map((wh, idx) => {
                 const whItems = stockItems.filter(s => s.warehouse === wh.name);
-                const val = whItems.reduce((acc, c) => acc + (c.availableUnits * c.costPrice), 0);
-                const pct = wh.capacityUnits > 0 ? Math.round((wh.currentUnits / wh.capacityUnits) * 100) : 0;
+                const val = whItems.reduce((acc, c) => acc + ((c.availableUnits || 0) * (c.costPrice || 0)), 0);
+                const curUnits = Number(wh.currentUnits || 0);
+                const capUnits = Number(wh.capacityUnits || wh.finishedGoodsCapacityUnits || 0);
+                const pct = capUnits > 0 ? Math.round((curUnits / capUnits) * 100) : 0;
                 let barColor = 'bg-emerald-500';
                 if (pct > 80) barColor = 'bg-amber-500';
                 if (pct > 95) barColor = 'bg-rose-500';
@@ -318,11 +322,11 @@ export const DashboardPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-bold text-zinc-900 dark:text-zinc-100">{wh.name}</div>
-                        <div className="text-[10px] text-zinc-500">{whItems.length} Active SKUs • Manager: {wh.managerName}</div>
+                        <div className="text-[10px] text-zinc-500">{whItems.length} Active SKUs • Manager: {wh.managerName || 'Facility Manager'}</div>
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-emerald-600 dark:text-emerald-400">₹{val.toLocaleString('en-IN')}</div>
-                        <div className="text-[10px] text-zinc-500">{wh.currentUnits.toLocaleString()} / {wh.capacityUnits.toLocaleString()} Units ({pct}%)</div>
+                        <div className="text-[10px] text-zinc-500">{curUnits.toLocaleString()} / {capUnits.toLocaleString()} Units ({pct}%)</div>
                       </div>
                     </div>
                     <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">

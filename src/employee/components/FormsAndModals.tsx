@@ -67,10 +67,14 @@ export default function FormsAndModals({
 
   if (!isOpen || !formType) return null;
 
-  const availableRawMaterials = rawInventory.filter(r => r.availableMeters > 0);
+  const availableRawMaterials = rawInventory.filter(
+    r => r.availableMeters > 0 && r.status !== 'Depleted' && (r.totalMeters === 0 || r.allocatedMeters < r.totalMeters)
+  );
   const selectedRaw = rawInventory.find(r => r.id === selectedRawInvId);
 
-  const availableFinished = finishedInventory.filter(f => f.availableQuantity > 0);
+  const availableFinished = finishedInventory.filter(
+    f => (f.availableQuantity || 0) > 0 && f.status !== 'Sold Out' && f.status !== 'Out of Stock'
+  );
   const selectedFin = finishedInventory.find(f => f.id === selectedFinId);
 
   const handleOrderSubmit = (e: React.FormEvent) => {
