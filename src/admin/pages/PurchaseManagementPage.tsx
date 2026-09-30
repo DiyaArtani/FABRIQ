@@ -5,6 +5,7 @@ import { useFabriqData } from '../../context/FabriqDataContext';
 import { Purchase, Supplier, PurchaseItem } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { sortLatest } from '../../utils/sortUtils';
+import { getNextSupplierId } from '../../utils/supplierUtils';
 
 interface FormFabricItem {
   id: string;
@@ -288,8 +289,11 @@ export const PurchaseManagementPage: React.FC = () => {
       s => s.name.trim().toLowerCase() === cleanSupName.toLowerCase()
     );
     if (!existingSupplier) {
+      const nextSupId = getNextSupplierId(suppliers);
       addSupplier({
-        code: `SUP-${String(Date.now()).slice(-4)}`,
+        id: nextSupId,
+        code: nextSupId,
+        supplierId: nextSupId,
         name: cleanSupName,
         phone: supplierPhone.trim(),
         address: supplierAddress.trim() || 'N/A',
@@ -314,12 +318,14 @@ export const PurchaseManagementPage: React.FC = () => {
     const activeBill = editingItem ? (billNumber || editingItem.billNumber || nextBillNumber) : nextBillNumber;
     const manualSupplierInv = supplierInvoiceNumber.trim();
 
-    const compiledItems: PurchaseItem[] = fabricItems.map(it => {
+    const purchaseId = editingItem ? editingItem.id : `pur-${Date.now()}`;
+
+    const compiledItems: PurchaseItem[] = fabricItems.map((it, idx) => {
       const m = typeof it.meters === 'number' ? it.meters : (parseFloat(it.meters) || 0);
       const r = typeof it.rate === 'number' ? it.rate : (parseFloat(it.rate) || 0);
       return {
-        id: it.id,
-        fabricName: it.fabricName.trim(),
+        id: `pitem-${purchaseId}-${idx}`,
+        fabricName: it.fabricName.trim() || 'Raw Fabric',
         width: it.width.trim() || '58"',
         meters: m,
         rate: r,
@@ -332,7 +338,7 @@ export const PurchaseManagementPage: React.FC = () => {
 
     // Database payload strictly containing ONLY the Add Purchase fields
     const purchasePayload: Purchase = {
-      id: editingItem ? editingItem.id : `pur-${Date.now()}`,
+      id: purchaseId,
       billNumber: activeBill,
       invoiceNumber: manualSupplierInv,
       supplier: {
@@ -733,16 +739,22 @@ export const PurchaseManagementPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
-                  <span>Mobile Number</span>
-                  <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
+                    <span>Mobile Number</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-zinc-400">10 digits</span>
+                </div>
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
                   required
                   value={supplierPhone}
-                  onChange={(e) => setSupplierPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
+                  onChange={(e) => setSupplierPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
                   className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
                 />
               </div>
@@ -825,13 +837,10 @@ export const PurchaseManagementPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
+                <div>
                   <label className="text-xs font-mono font-bold uppercase text-zinc-500">
                     Bill Number (Internal)
                   </label>
-                  <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                    AUTO-GENERATED
-                  </span>
                 </div>
                 <input
                   type="text"

@@ -154,26 +154,26 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Override Delete ${itemType}`} maxWidth="max-w-md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Confirm Delete" maxWidth="max-w-md">
       <div className="space-y-4">
-        <div className="flex items-center gap-3 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 rounded-xl">
-          <AlertTriangle className="w-6 h-6 shrink-0 text-rose-600 dark:text-rose-400" />
-          <p className="text-xs font-geist">
-            <strong>CRITICAL ADMIN ACTION:</strong> You are about to permanently delete <strong>{itemName}</strong>. This record will be expunged from the active ledger.
+        <div>
+          <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            Do you want to delete this?
           </p>
+          {itemName && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 font-mono break-all">
+              {itemName}
+            </p>
+          )}
         </div>
 
-        <p className="text-sm text-zinc-600 dark:text-zinc-300 font-sans">
-          Are you sure you want to proceed? An entry will be saved in the system Audit Log.
-        </p>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-800 font-sans">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 text-xs font-bold border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl cursor-pointer transition-colors"
           >
-            CANCEL
+            Cancel
           </button>
           <button
             type="button"
@@ -184,7 +184,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1.5 shadow-sm rounded-xl cursor-pointer transition-colors"
           >
             <Trash2 className="w-4 h-4" />
-            CONFIRM DELETE
+            Confirm Delete
           </button>
         </div>
       </div>

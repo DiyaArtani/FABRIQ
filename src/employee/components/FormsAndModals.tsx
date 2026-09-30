@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ProductionOrder, StockItem, Invoice, RawInventoryItem, FinishedInventoryItem } from '../../types';
 import { X, Save, Sparkles, PackageCheck, ArrowRight, Layers, Building2 } from 'lucide-react';
 import { useFabriqData } from '../../context/FabriqDataContext';
+import { getNextInvoiceNumber } from '../../lib/invoiceUtils';
 
 interface FormModalsProps {
   isOpen: boolean;
@@ -26,18 +27,51 @@ export default function FormsAndModals({
   onSubmitCustomer,
   stockItemsList = []
 }: FormModalsProps) {
-  const { rawInventory, finishedInventory, customers, contractors, warehouses, addSale } = useFabriqData();
+  const { rawInventory, finishedInventory, customers, contractors, warehouses, invoices, sales, addSale } = useFabriqData();
   const activeCustomers = customers || [];
+
+  // Auto-generated sales invoice number
+  const nextInvoiceNumber = useMemo(() => {
+    return getNextInvoiceNumber(invoices || [], sales || []);
+  }, [invoices, sales]);
+  const [saleInvoiceNumber, setSaleInvoiceNumber] = useState('');
+  const [saleGstRate, setSaleGstRate] = useState<number>(5);
 
   // New Order State
   const [orderName, setOrderName] = useState('');
-  const [orderCollection, setOrderCollection] = useState('');
-  const [orderStage, setOrderStage] = useState('Fabric Cutting');
+  const [orderStage, setOrderStage] = useState('Cutting');
   const [orderTotal, setOrderTotal] = useState(100);
-  const [orderAssigned, setOrderAssigned] = useState(contractors[0]?.name || '');
   const [orderDueDate, setOrderDueDate] = useState('');
   const [selectedRawInvId, setSelectedRawInvId] = useState('');
   const [metersToUse, setMetersToUse] = useState(0);
+
+  // Helper to match contractor specialty with stage
+  const isMatchContractorSpecialty = (specialty?: string, stage?: string) => {
+    if (!specialty || !stage) return false;
+    const s = specialty.toLowerCase();
+    const st = stage.toLowerCase();
+    if (st.includes('cut')) return s.includes('cut');
+    if (st.includes('stitch')) return s.includes('stitch');
+    if (st.includes('wash')) return s.includes('wash');
+    if (st.includes('pack')) return s.includes('pack');
+    return false;
+  };
+
+  const stageContractors = useMemo(() => {
+    return (contractors || []).filter(c => isMatchContractorSpecialty(c.specialty, orderStage) && c.status !== 'Inactive');
+  }, [contractors, orderStage]);
+
+  const [orderAssigned, setOrderAssigned] = useState('');
+
+  useEffect(() => {
+    if (stageContractors.length > 0) {
+      if (!stageContractors.some(c => c.name === orderAssigned)) {
+        setOrderAssigned(stageContractors[0].name);
+      }
+    } else {
+      setOrderAssigned('');
+    }
+  }, [stageContractors]);
 
   // Add Stock State
   const [isNewItemType, setIsNewItemType] = useState(false);
@@ -53,6 +87,9 @@ export default function FormsAndModals({
   const [selectedFinId, setSelectedFinId] = useState('');
   const [saleQuantity, setSaleQuantity] = useState(1);
   const [salePrice, setSalePrice] = useState(1200);
+  const [salePaymentStatus, setSalePaymentStatus] = useState<'Paid' | 'Partial' | 'Pending'>('Paid');
+  const [salePaymentMethod, setSalePaymentMethod] = useState<string>('Bank Transfer');
+  const [salePaidAmount, setSalePaidAmount] = useState<number>(0);
 
   // New Purchase State
   const [supplierName, setSupplierName] = useState('');
@@ -64,6 +101,7 @@ export default function FormsAndModals({
   const [customerName, setCustomerName] = useState('');
   const [customerType, setCustomerType] = useState<'Wholesale' | 'Retailer' | 'Boutique' | 'Export'>('Wholesale');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
 
   if (!isOpen || !formType) return null;
 
@@ -95,7 +133,6 @@ export default function FormsAndModals({
       orderCode: code,
       name: orderName,
       styleName: orderName,
-      collection: orderCollection,
       stage: orderStage,
       total: orderTotal,
       quantity: orderTotal,
@@ -147,14 +184,25 @@ export default function FormsAndModals({
     e.preventDefault();
     const cust = customers.find(c => c.id === selectedCustId) || { id: 'cust-1', name: 'Westside Retail Ltd' };
 
+    const finalInv = saleInvoiceNumber.trim() || nextInvoiceNumber;
+    const effectivePrice = salePrice || (selectedFin ? selectedFin.unitPrice : 1200) || 1200;
+    const finalSubtotal = saleQuantity * effectivePrice;
+    const finalGstAmount = saleGstRate > 0 ? Math.round((finalSubtotal * (saleGstRate / 100)) * 100) / 100 : 0;
+    const finalGrandTotal = finalSubtotal + finalGstAmount;
+
     if (selectedFinId && selectedFin) {
       if (saleQuantity > selectedFin.availableQuantity) {
         alert(`Cannot sell ${saleQuantity} — only ${selectedFin.availableQuantity} pcs available in Finished Goods!`);
         return;
       }
 
+      const finalPaidAmt = salePaymentStatus === 'Paid'
+        ? finalGrandTotal
+        : (salePaymentStatus === 'Partial' ? (Number(salePaidAmount) || 0) : 0);
+
       await addSale({
-        saleCode: `SALE-2026-${Math.floor(100 + Math.random() * 900)}`,
+        saleCode: finalInv,
+        invoiceNumber: finalInv,
         customerId: cust.id,
         customerName: cust.name,
         items: [
@@ -162,28 +210,44 @@ export default function FormsAndModals({
             finishedInventoryId: selectedFin.id,
             productName: selectedFin.productName,
             quantity: saleQuantity,
-            unitPrice: salePrice || selectedFin.unitPrice || 1200,
-            total: saleQuantity * (salePrice || selectedFin.unitPrice || 1200)
+            unitPrice: effectivePrice,
+            total: finalSubtotal
           }
         ],
-        totalAmount: saleQuantity * (salePrice || selectedFin.unitPrice || 1200),
+        subtotal: finalSubtotal,
+        gstRate: saleGstRate,
+        gstAmount: finalGstAmount,
+        grandTotal: finalGrandTotal,
+        totalAmount: finalGrandTotal,
         saleDate: new Date().toISOString().substring(0, 10),
-        status: 'Confirmed'
+        status: 'Confirmed',
+        paymentStatus: salePaymentStatus,
+        paymentMethod: salePaymentMethod,
+        paymentMode: salePaymentMethod,
+        paidAmount: finalPaidAmt
       });
     } else {
-      const invCode = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
       onSubmitInvoice({
-        invoiceNumber: invCode,
-        invoiceCode: invCode,
+        invoiceNumber: finalInv,
+        invoiceCode: finalInv,
         client: cust.name,
         customerName: cust.name,
         date: new Date().toISOString().substring(0, 10),
-        amount: saleQuantity * salePrice,
-        status: 'Pending',
+        subtotal: finalSubtotal,
+        taxRate: saleGstRate,
+        taxAmount: finalGstAmount,
+        amount: finalGrandTotal,
+        totalAmount: finalGrandTotal,
+        status: salePaymentStatus === 'Paid' ? 'Paid' : 'Pending',
+        paymentMethod: salePaymentMethod,
+        paymentMode: salePaymentMethod,
         itemsSummary: `${saleQuantity} Pcs Garments`
       });
     }
 
+    setSalePaymentStatus('Paid');
+    setSalePaymentMethod('Bank Transfer');
+    setSalePaidAmount(0);
     onClose();
   };
 
@@ -198,7 +262,6 @@ export default function FormsAndModals({
           name: supplierName || 'Arvind Denim Mills',
           contactPerson: 'Manager',
           phone: '+91 79 6826 8000',
-          email: 'sales@arvinddenim.com',
           address: 'Ahmedabad Mill'
         },
         purchaseDate: new Date().toISOString().substring(0, 10),
@@ -208,14 +271,12 @@ export default function FormsAndModals({
         fabricName: purchaseMaterial,
         color: 'Indigo Blue',
         width: '58 inch',
-        gsmWeight: '12 oz',
         rollQuantity: Math.ceil(purchaseQty / 50),
         meters: purchaseQty,
         rate: purchaseRate,
         totalAmount,
         warehouse: 'Main Godown',
         section: 'Raw Fabric',
-        rack: 'A-12',
         batchNumber: `DF-2026-${Math.floor(100 + Math.random() * 900)}`,
         fabricMill: supplierName || 'Arvind Denim Mills'
       });
@@ -232,7 +293,7 @@ export default function FormsAndModals({
         name: customerName,
         type: customerType,
         contactPerson: customerName,
-        email: `${customerName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        email: customerEmail.trim() || '',
         phone: customerPhone || '+91 98200 12345',
         address: '102 Fashion Avenue, Industrial Hub',
         creditLimit: 50000,
@@ -241,6 +302,8 @@ export default function FormsAndModals({
       });
     }
     setCustomerName('');
+    setCustomerPhone('');
+    setCustomerEmail('');
     onClose();
   };
 
@@ -340,8 +403,7 @@ export default function FormsAndModals({
                     <option value="Cutting">Cutting</option>
                     <option value="Stitching">Stitching</option>
                     <option value="Washing">Washing</option>
-                    <option value="Finishing">Finishing</option>
-                    <option value="Quality Control">Quality Control</option>
+                    <option value="Packaging">Packaging</option>
                   </select>
                 </div>
 
@@ -361,21 +423,27 @@ export default function FormsAndModals({
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider mb-1">
-                  Contractor Partner
+                  {orderStage} Contractor
                 </label>
                 <select
                   value={orderAssigned}
                   onChange={(e) => setOrderAssigned(e.target.value)}
                   className="w-full h-11 px-3 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm cursor-pointer"
+                  required
                 >
-                  {contractors && contractors.length > 0 ? (
-                    contractors.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))
-                  ) : (
-                    <option value="">-- No Contractors Configured --</option>
+                  <option value="">-- Select {orderStage} Contractor --</option>
+                  {stageContractors.map(c => (
+                    <option key={c.id} value={c.name}>{c.name} ({c.specialty})</option>
+                  ))}
+                  {stageContractors.length === 0 && (
+                    <option value="" disabled>-- No {orderStage} Contractors Configured --</option>
                   )}
                 </select>
+                {stageContractors.length === 0 && (
+                  <p className="text-[10px] text-amber-500 font-mono mt-1">
+                    No contractors saved with {orderStage} specialty.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -473,6 +541,20 @@ export default function FormsAndModals({
 
             <div className="space-y-3 text-xs">
               <div>
+                <div className="mb-1">
+                  <label className="block text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    Sales Invoice Number
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={saleInvoiceNumber || nextInvoiceNumber}
+                  onChange={(e) => setSaleInvoiceNumber(e.target.value)}
+                  className="w-full h-11 px-3.5 bg-emerald-50/40 dark:bg-neutral-950 border border-emerald-300 dark:border-emerald-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-mono font-bold text-emerald-900 dark:text-emerald-300"
+                />
+              </div>
+
+              <div>
                 <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider mb-1">
                   Customer Account
                 </label>
@@ -564,9 +646,154 @@ export default function FormsAndModals({
                 </div>
               </div>
 
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl flex justify-between items-center text-xs font-mono font-bold">
-                <span>Calculated Total:</span>
-                <span className="text-emerald-700 dark:text-emerald-400 text-sm">₹{(saleQuantity * salePrice).toLocaleString('en-IN')}</span>
+              {/* GST Option Selection */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider">
+                    GST Option
+                  </label>
+                  <span className="text-[10px] text-gray-400">Select invoice tax rate</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { rate: 0, label: '0% (Exempt)' },
+                    { rate: 5, label: '5%' },
+                    { rate: 12, label: '12%' },
+                    { rate: 18, label: '18%' }
+                  ].map(opt => (
+                    <button
+                      key={opt.rate}
+                      type="button"
+                      onClick={() => setSaleGstRate(opt.rate)}
+                      className={`py-2 px-1 text-xs font-bold rounded-lg border transition-all cursor-pointer text-center ${
+                        saleGstRate === opt.rate
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-gray-50 dark:bg-neutral-950 text-gray-700 dark:text-neutral-300 border-gray-200 dark:border-neutral-800 hover:border-emerald-500'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Subtotal, GST & Total Summary */}
+              {(() => {
+                const sub = saleQuantity * salePrice;
+                const gst = saleGstRate > 0 ? Math.round((sub * (saleGstRate / 100)) * 100) / 100 : 0;
+                const grand = sub + gst;
+                return (
+                  <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1.5 text-xs font-mono">
+                    <div className="flex justify-between items-center text-gray-500 dark:text-neutral-400">
+                      <span>Items Subtotal:</span>
+                      <span className="font-bold text-gray-900 dark:text-neutral-100">₹{sub.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-gray-500 dark:text-neutral-400">
+                      <span>GST ({saleGstRate}%):</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {saleGstRate === 0 ? '₹0.00 (Exempt)' : `+₹${gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                    <div className="border-t border-emerald-200 dark:border-emerald-800/60 pt-1.5 flex justify-between items-center font-bold text-sm">
+                      <span className="text-emerald-900 dark:text-emerald-200">Total Invoice Amount:</span>
+                      <span className="text-emerald-700 dark:text-emerald-400">₹{grand.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Payment Details Section */}
+              <div className="p-3.5 bg-gray-50 dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-gray-700 dark:text-neutral-300 uppercase tracking-wider">
+                    Payment Status
+                  </label>
+                  <span className="text-[10px] text-gray-400">Select payment condition</span>
+                </div>
+
+                {/* Paid / Partial / Pending Tabs */}
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Paid', 'Partial', 'Pending'] as const).map((status) => {
+                    const isSelected = salePaymentStatus === status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setSalePaymentStatus(status)}
+                        className={`py-2 px-2 text-xs font-bold rounded-lg border transition-all cursor-pointer text-center ${
+                          isSelected
+                            ? status === 'Paid'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : status === 'Partial'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300 border-gray-200 dark:border-neutral-800 hover:border-gray-400'
+                        }`}
+                      >
+                        {status === 'Paid' && '✓ Paid'}
+                        {status === 'Partial' && '◐ Partial'}
+                        {status === 'Pending' && '⏳ Pending'}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Method of Payment & (if Partial) Paid Amount */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                      Method of Payment
+                    </label>
+                    <select
+                      value={salePaymentMethod}
+                      onChange={(e) => setSalePaymentMethod(e.target.value)}
+                      className="w-full h-10 px-3 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs cursor-pointer"
+                    >
+                      <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                      <option value="UPI / QR">UPI / QR Code</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Card">Debit / Credit Card</option>
+                      <option value="Credit / On Account">Credit / On Account (Net 30)</option>
+                    </select>
+                  </div>
+
+                  {salePaymentStatus === 'Partial' ? (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                          Amount Paid (₹)
+                        </label>
+                        <span className="text-[10px] font-mono text-gray-400">
+                          Due: ₹{Math.max(0, (saleQuantity * salePrice + (saleGstRate > 0 ? (saleQuantity * salePrice * saleGstRate) / 100 : 0)) - (salePaidAmount || 0)).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        max={saleQuantity * salePrice + (saleGstRate > 0 ? (saleQuantity * salePrice * saleGstRate) / 100 : 0)}
+                        value={salePaidAmount || ''}
+                        onChange={(e) => setSalePaidAmount(parseFloat(e.target.value) || 0)}
+                        placeholder="Enter amount paid"
+                        className="w-full h-10 px-3 bg-white dark:bg-neutral-900 border border-amber-300 dark:border-amber-800 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-xs font-mono font-bold"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        Settlement Summary
+                      </label>
+                      <div className="h-10 px-3 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl flex items-center text-xs font-mono font-bold">
+                        {salePaymentStatus === 'Paid' ? (
+                          <span className="text-emerald-600">Full Payment Received</span>
+                        ) : (
+                          <span className="text-rose-600">Pending (Unpaid)</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -708,17 +935,39 @@ export default function FormsAndModals({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider mb-1">
-                    Phone Number
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Phone Number
+                    </label>
+                    <span className="text-[10px] font-mono text-gray-400">10 digits</span>
+                  </div>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="+91 98200 12345"
+                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="9820012345"
                     className="w-full h-11 px-3.5 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                   />
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider">
+                    Email Address
+                  </label>
+                  <span className="text-[10px] font-mono text-gray-400">Optional</span>
+                </div>
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="orders@company.com (optional)"
+                  className="w-full h-11 px-3.5 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
+                />
               </div>
             </div>
 

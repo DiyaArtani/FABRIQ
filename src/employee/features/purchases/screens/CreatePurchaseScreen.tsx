@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Purchase, Supplier, PurchaseStatus, PurchaseItem } from '../types';
 import { useFabriqData } from '../../../../context/FabriqDataContext';
+import { getNextSupplierId } from '../../../../utils/supplierUtils';
 
 interface CreatePurchaseScreenProps {
   purchaseToEdit?: Purchase | null;
@@ -341,14 +342,15 @@ export default function CreatePurchaseScreen({
     );
 
     if (!existingSupplier) {
-      // Auto-save new Vendor/Supplier into the database (reflects in Admin & Employee immediately)
+      // Auto-save new Vendor/Supplier into the database with sequential Supplier ID
+      const nextSupId = getNextSupplierId(suppliers);
       const newSupplierRecord: Supplier = {
-        id: `sup-${Date.now()}`,
-        code: `SUP-${String(Date.now()).slice(-4)}`,
+        id: nextSupId,
+        code: nextSupId,
+        supplierId: nextSupId,
         name: cleanName,
         contactPerson: cleanName,
         phone: supplierMobile.trim(),
-        email: `${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '')}@supplier.com`,
         address: supplierAddress.trim() || 'N/A',
         gstin: supplierGstin.trim() || undefined,
         accountNumber: bankAccountNumber.trim() || undefined,
@@ -374,13 +376,15 @@ export default function CreatePurchaseScreen({
     const activeBillNum = purchaseToEdit ? (billNumber || purchaseToEdit.billNumber || nextBillNumber) : nextBillNumber;
     const manualSupplierInv = supplierInvoiceNumber.trim();
 
-    const compiledItems: PurchaseItem[] = fabricItems.map(it => {
+    const purchaseId = purchaseToEdit?.id || `pur-${Date.now()}`;
+
+    const compiledItems: PurchaseItem[] = fabricItems.map((it, idx) => {
       const m = parseFloat(it.meters) || 0;
       const r = parseFloat(it.ratePerMeter) || 0;
       return {
-        id: it.id,
-        fabricName: it.fabricName.trim(),
-        width: it.width.trim() || '',
+        id: `pitem-${purchaseId}-${idx}`,
+        fabricName: it.fabricName.trim() || 'Raw Fabric',
+        width: it.width.trim() || '58"',
         meters: m,
         rate: r,
         amount: m * r,
@@ -391,7 +395,7 @@ export default function CreatePurchaseScreen({
     const joinedFabricName = compiledItems.map(it => it.fabricName).join(', ');
 
     const compiledPurchase: Purchase = {
-      id: purchaseToEdit?.id || `pur-${Date.now()}`,
+      id: purchaseId,
       billNumber: activeBillNum,
       invoiceNumber: manualSupplierInv,
       supplier: {
@@ -627,17 +631,23 @@ export default function CreatePurchaseScreen({
 
                 {/* Supplier Mobile No - COMPULSORY */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-mono font-bold text-gray-700 dark:text-zinc-300 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-sky-500" />
-                    <span>Mobile Number</span>
-                    <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono font-bold text-gray-700 dark:text-zinc-300 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-sky-500" />
+                      <span>Mobile Number</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] font-mono text-gray-400">10 digits</span>
+                  </div>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     required
                     value={supplierMobile}
-                    onChange={(e) => setSupplierMobile(e.target.value)}
-                    placeholder="+91 98765 43210"
+                    onChange={(e) => setSupplierMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="9876543210"
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-gray-900 dark:text-neutral-100 focus:border-sky-500 outline-none"
                   />
                 </div>
@@ -826,11 +836,8 @@ export default function CreatePurchaseScreen({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-mono font-bold text-gray-700 dark:text-zinc-300">
-                  Bill Number (Internal)
+                  Bill Number
                 </label>
-                <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                  AUTO-GENERATED
-                </span>
               </div>
               <input
                 type="text"
@@ -904,20 +911,6 @@ export default function CreatePurchaseScreen({
                 <option value="Credit">Credit</option>
                 <option value="Cash">Cash</option>
               </select>
-            </div>
-
-            {/* Remarks */}
-            <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-xs font-mono font-bold text-gray-700 dark:text-zinc-300">
-                Remarks / Notes (Optional)
-              </label>
-              <input
-                type="text"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="e.g. Dispatched via truck MH-12-AB-1234"
-                className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-gray-900 dark:text-neutral-100 focus:border-sky-500 outline-none"
-              />
             </div>
           </div>
         </div>

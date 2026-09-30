@@ -77,7 +77,7 @@ export const RawInventoryDetailsModal: React.FC<RawInventoryDetailsModalProps> =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-2xl w-full my-6 flex flex-col rounded-2xl overflow-hidden font-mono text-zinc-900 dark:text-zinc-100">
-        
+
         {/* Header */}
         <div className="p-5 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -110,7 +110,7 @@ export const RawInventoryDetailsModal: React.FC<RawInventoryDetailsModalProps> =
 
         {/* Modal Body - All Inventory Related Details */}
         <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
-          
+
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl">

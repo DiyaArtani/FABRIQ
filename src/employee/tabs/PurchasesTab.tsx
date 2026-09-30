@@ -7,8 +7,21 @@ import PurchaseDetailsScreen from '../features/purchases/screens/PurchaseDetails
 import CreatePurchaseScreen from '../features/purchases/screens/CreatePurchaseScreen';
 import PurchasePDFPreviewScreen from '../features/purchases/screens/PurchasePDFPreviewScreen';
 
-export default function PurchasesTab() {
-  const [view, setView] = useState<'list' | 'details' | 'create' | 'edit'>('list');
+interface PurchasesTabProps {
+  key?: string;
+  initialView?: 'list' | 'create';
+  onClearInitialView?: () => void;
+}
+
+export default function PurchasesTab({ initialView, onClearInitialView }: PurchasesTabProps = {}) {
+  const [view, setView] = useState<'list' | 'details' | 'create' | 'edit'>(initialView || 'list');
+
+  React.useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+      if (onClearInitialView) onClearInitialView();
+    }
+  }, [initialView, onClearInitialView]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
 

@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Receipt, Plus, Search, Edit, Trash2, ArrowRight, PackageCheck, ShoppingCart, FileText, Building2, CheckCircle2, User, Phone, ChevronDown, Printer } from 'lucide-react';
+import { Receipt, Plus, Search, Edit, Trash2, ArrowRight, PackageCheck, ShoppingCart, FileText, Building2, CheckCircle2, User, Phone, ChevronDown, Printer, X } from 'lucide-react';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Invoice, SaleOrder, SaleLineItem, FinishedInventoryItem, Customer } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { TaxInvoiceModal } from '../components/TaxInvoiceModal';
+import { WhatsAppShareModal, WhatsAppIcon } from '../../components/WhatsAppShareModal';
 import { sortLatest } from '../../utils/sortUtils';
-
-type SalesTab = 'sales' | 'invoices';
+import { getNextInvoiceNumber, resolveInvoiceForSale } from '../../lib/invoiceUtils';
 
 export const SalesManagementPage: React.FC = () => {
   const {
@@ -14,6 +14,7 @@ export const SalesManagementPage: React.FC = () => {
     customers,
     sales,
     finishedInventory,
+    settings,
     addSale,
     addCustomer,
     updateInvoice,
@@ -26,7 +27,6 @@ export const SalesManagementPage: React.FC = () => {
     return customers || [];
   }, [customers]);
 
-  const [activeTab, setActiveTab] = useState<SalesTab>('sales');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
@@ -35,14 +35,19 @@ export const SalesManagementPage: React.FC = () => {
   const [saleCustomerId, setSaleCustomerId] = useState(activeCustomers[0]?.id || '');
   const [saleCustomerName, setSaleCustomerName] = useState(activeCustomers[0]?.name || '');
   const [isCreatingNewCust, setIsCreatingNewCust] = useState(false);
-  
+
   // Custom Customer Inputs
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerType, setNewCustomerType] = useState<'Wholesale' | 'Retailer' | 'Boutique' | 'Export'>('Wholesale');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
 
-  const [saleCode, setSaleCode] = useState('');
+  const [saleGstRate, setSaleGstRate] = useState<number>(5);
+  const nextInvoiceNumber = useMemo(() => {
+    return getNextInvoiceNumber(invoices, sales);
+  }, [invoices, sales]);
+  const [saleInvoiceNumber, setSaleInvoiceNumber] = useState('');
+
   const [saleLines, setSaleLines] = useState<Array<{
     finishedInventoryId: string;
     productName: string;
@@ -52,6 +57,11 @@ export const SalesManagementPage: React.FC = () => {
   }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Payment Status & Method for New Sale
+  const [salePaymentStatus, setSalePaymentStatus] = useState<'Paid' | 'Partial' | 'Pending'>('Paid');
+  const [salePaymentMethod, setSalePaymentMethod] = useState('Bank Transfer');
+  const [salePaidAmount, setSalePaidAmount] = useState<number>(0);
+
   // Invoice Edit & View Modals
   const [isInvEditOpen, setIsInvEditOpen] = useState(false);
   const [editingInv, setEditingInv] = useState<Invoice | null>(null);
@@ -59,10 +69,10 @@ export const SalesManagementPage: React.FC = () => {
   const [invPaymentMode, setInvPaymentMode] = useState('Bank Transfer');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [whatsAppData, setWhatsAppData] = useState<{ invoice: Invoice; customer: Customer | null } | null>(null);
 
   // Sale Delete
   const [deleteSaleCandidate, setDeleteSaleCandidate] = useState<SaleOrder | null>(null);
-  const [deleteInvCandidate, setDeleteInvCandidate] = useState<Invoice | null>(null);
 
   // Available finished goods for sale
   const availableFinishedGoods = useMemo(() => {
@@ -91,33 +101,31 @@ export const SalesManagementPage: React.FC = () => {
     setNewCustomerPhone('');
     setNewCustomerAddress('');
 
-    setSaleCode(`SALE-${Date.now().toString().slice(-6)}`);
-    setSaleLines([]);
-    
-    // Auto-add first line item if finished goods exist
-    if (availableFinishedGoods.length > 0) {
-      const first = availableFinishedGoods[0];
-      setSaleLines([{
-        finishedInventoryId: first.id,
-        productName: first.productName,
-        quantity: 1,
-        unitPrice: first.unitPrice || 1200,
-        maxQty: first.availableQuantity
-      }]);
-    }
-    
+    setSaleInvoiceNumber(getNextInvoiceNumber(invoices, sales));
+    setSaleGstRate(settings?.defaultTaxRate !== undefined ? settings.defaultTaxRate : 5);
+    // When adding sales or items, start with an empty item with nothing selected
+    setSaleLines([{
+      finishedInventoryId: '',
+      productName: '',
+      quantity: 1,
+      unitPrice: 0,
+      maxQty: 0
+    }]);
+
+    setSalePaymentStatus('Paid');
+    setSalePaymentMethod('Bank Transfer');
+    setSalePaidAmount(0);
+
     setIsSaleModalOpen(true);
   };
 
   const addSaleLine = () => {
-    if (availableFinishedGoods.length === 0) return;
-    const firstAvailable = availableFinishedGoods[0];
     setSaleLines(prev => [...prev, {
-      finishedInventoryId: firstAvailable.id,
-      productName: firstAvailable.productName,
+      finishedInventoryId: '',
+      productName: '',
       quantity: 1,
-      unitPrice: firstAvailable.unitPrice || 1200,
-      maxQty: firstAvailable.availableQuantity
+      unitPrice: 0,
+      maxQty: 0
     }]);
   };
 
@@ -125,6 +133,16 @@ export const SalesManagementPage: React.FC = () => {
     setSaleLines(prev => prev.map((line, i) => {
       if (i !== index) return line;
       if (field === 'finishedInventoryId') {
+        if (!value) {
+          return {
+            ...line,
+            finishedInventoryId: '',
+            productName: '',
+            unitPrice: 0,
+            maxQty: 0,
+            quantity: 1
+          };
+        }
         const finItem = finishedInventory.find(f => f.id === value);
         if (finItem) {
           return {
@@ -133,12 +151,12 @@ export const SalesManagementPage: React.FC = () => {
             productName: finItem.productName,
             unitPrice: finItem.unitPrice || 1200,
             maxQty: finItem.availableQuantity,
-            quantity: Math.min(line.quantity, finItem.availableQuantity)
+            quantity: Math.min(line.quantity || 1, Math.max(1, finItem.availableQuantity))
           };
         }
       }
       if (field === 'quantity') {
-        const qty = Math.min(Number(value), line.maxQty);
+        const qty = line.maxQty > 0 ? Math.min(Number(value), line.maxQty) : Number(value);
         return { ...line, quantity: Math.max(1, qty) };
       }
       if (field === 'unitPrice') {
@@ -152,9 +170,18 @@ export const SalesManagementPage: React.FC = () => {
     setSaleLines(prev => prev.filter((_, i) => i !== index));
   };
 
-  const saleTotalAmount = useMemo(() => {
+  const saleSubtotal = useMemo(() => {
     return saleLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0);
   }, [saleLines]);
+
+  const saleGstAmount = useMemo(() => {
+    if (saleGstRate <= 0) return 0;
+    return Math.round((saleSubtotal * (saleGstRate / 100)) * 100) / 100;
+  }, [saleSubtotal, saleGstRate]);
+
+  const saleGrandTotal = useMemo(() => {
+    return saleSubtotal + saleGstAmount;
+  }, [saleSubtotal, saleGstAmount]);
 
   const handleSaleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,7 +204,7 @@ export const SalesManagementPage: React.FC = () => {
         name: finalCustName,
         type: newCustomerType,
         contactPerson: finalCustName,
-        email: `${finalCustName.toLowerCase().replace(/[^a-z0-9]/g, '')}@client.com`,
+        email: '',
         phone: newCustomerPhone.trim() || '+91 98200 00000',
         address: newCustomerAddress.trim() || 'Commercial District',
         creditLimit: 500000,
@@ -195,8 +222,8 @@ export const SalesManagementPage: React.FC = () => {
       }
     }
 
-    if (saleLines.length === 0) {
-      alert('Add at least one product line item to the sale.');
+    if (saleLines.length === 0 || saleLines.some(l => !l.finishedInventoryId)) {
+      alert('Please select a finished garment product for each line item before completing the sale.');
       return;
     }
 
@@ -219,17 +246,47 @@ export const SalesManagementPage: React.FC = () => {
         total: line.quantity * line.unitPrice
       }));
 
-      await addSale({
-        saleCode,
+      const finalInvNumber = saleInvoiceNumber.trim() || nextInvoiceNumber;
+      const finalCustPhone = (saleCustomerId === '__NEW__' || isCreatingNewCust)
+        ? newCustomerPhone.trim()
+        : (selectedCustomerObj?.phone || '');
+
+      const finalPaidAmt = salePaymentStatus === 'Paid'
+        ? saleGrandTotal
+        : (salePaymentStatus === 'Partial' ? (Number(salePaidAmount) || 0) : 0);
+
+      const result = await addSale({
+        saleCode: finalInvNumber,
+        invoiceNumber: finalInvNumber,
         customerId: finalCustId,
         customerName: finalCustName,
+        customerPhone: finalCustPhone,
         items,
-        totalAmount: saleTotalAmount,
+        subtotal: saleSubtotal,
+        gstRate: saleGstRate,
+        gstAmount: saleGstAmount,
+        grandTotal: saleGrandTotal,
+        totalAmount: saleGrandTotal,
         saleDate: new Date().toISOString().substring(0, 10),
-        status: 'Confirmed'
+        status: 'Confirmed',
+        paymentStatus: salePaymentStatus,
+        paymentMethod: salePaymentMethod,
+        paymentMode: salePaymentMethod,
+        paidAmount: finalPaidAmt
       });
 
       setIsSaleModalOpen(false);
+
+      if (result?.invoice) {
+        const generatedInvoiceWithPhone: Invoice = {
+          ...result.invoice,
+          customerPhone: finalCustPhone,
+          customerName: finalCustName,
+          client: finalCustName
+        };
+        setViewingInvoice(generatedInvoiceWithPhone);
+        setIsInvoiceModalOpen(true);
+      }
     } catch (err: any) {
       alert(`Error creating sale: ${err?.message || 'Unknown error'}`);
     } finally {
@@ -272,29 +329,49 @@ export const SalesManagementPage: React.FC = () => {
     return activeCustomers.find(c => c.id === customerId) || null;
   };
 
-  // Filtered data (latest first)
+  // Helper to resolve invoice for a given sale entry reliably
+  const getSaleInvoiceObj = (s: SaleOrder): Invoice => {
+    return resolveInvoiceForSale(s, invoices, (s as any).customerPhone || getCustomerObj(s.customerId)?.phone);
+  };
+
+  // Quick Action: Open WhatsApp share modal for a specific sales entry
+  const handleOpenWhatsAppForSale = (s: SaleOrder) => {
+    const inv = getSaleInvoiceObj(s);
+    const resolvedCust = getCustomerObj(s.customerId) || {
+      id: s.customerId || 'cust',
+      code: 'CUST',
+      name: s.customerName,
+      companyName: s.customerName,
+      contactPerson: s.customerName,
+      phone: (s as any).customerPhone || inv.customerPhone || '',
+      email: '',
+      address: s.shippingAddress || '',
+      category: 'Wholesale',
+      creditLimit: 0,
+      outstandingBalance: 0,
+      paymentTerms: 'Immediate',
+      status: 'Active' as const,
+      ordersCount: 1
+    };
+
+    setWhatsAppData({
+      invoice: inv,
+      customer: resolvedCust
+    });
+  };
+
+  // Filtered sales data (latest first)
   const filteredSales = useMemo(() => {
     const list = sales.filter((s) => {
       const term = searchTerm.toLowerCase();
       const custName = getCustomerDisplayName(s.customerId, s.customerName).toLowerCase();
-      return (
-        (s.saleCode || '').toLowerCase().includes(term) ||
-        custName.includes(term)
-      );
-    });
-    return sortLatest(list);
-  }, [sales, searchTerm, activeCustomers]);
-
-  const filteredInvoices = useMemo(() => {
-    const list = invoices.filter((inv) => {
-      const invCode = (inv.invoiceNumber || inv.invoiceCode || '').toLowerCase();
-      const custName = getCustomerDisplayName(inv.customerId, inv.customerName || inv.client).toLowerCase();
-      const matchesSearch = invCode.includes(searchTerm.toLowerCase()) || custName.includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
+      const invNumStr = (s.invoiceNumber || s.invoiceId || '').toLowerCase();
+      const matchesSearch = custName.includes(term) || invNumStr.includes(term);
+      const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
     return sortLatest(list);
-  }, [invoices, searchTerm, statusFilter, activeCustomers]);
+  }, [sales, searchTerm, statusFilter, activeCustomers]);
 
   return (
     <div className="space-y-6">
@@ -303,14 +380,11 @@ export const SalesManagementPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 mb-1">
             <Receipt className="w-4 h-4" />
-            <span>SALES & BILLING — PIPELINE CONNECTED</span>
+            <span>SALES & BILLING </span>
           </div>
           <h1 className="font-hanken font-bold text-xl text-zinc-900 dark:text-zinc-100 tracking-tight">
             Sales & Billing Ledger
           </h1>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">
-            Sell from finished goods with automatic invoice generation and verified customer accounts.
-          </p>
         </div>
 
         <button
@@ -322,293 +396,136 @@ export const SalesManagementPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Pipeline Flow Indicator */}
-      <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-500">
-        <span className="font-bold text-zinc-500">Finished Inventory</span>
-        <ArrowRight className="w-3 h-3" />
-        <span className={`font-bold ${activeTab === 'sales' ? 'text-emerald-600 underline' : 'text-zinc-500'}`}>Customer Sale (deducts stock)</span>
-        <ArrowRight className="w-3 h-3" />
-        <span className={`font-bold ${activeTab === 'invoices' ? 'text-emerald-600 underline' : 'text-zinc-500'}`}>Tax Invoice (auto-generated)</span>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-0 border-b border-zinc-200 dark:border-zinc-800">
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'sales'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
-              : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-3.5 h-3.5" />
-            Sales Orders ({sales.length})
-          </div>
-        </button>
-        <button
-          onClick={() => setActiveTab('invoices')}
-          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'invoices'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
-              : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <FileText className="w-3.5 h-3.5" />
-            Invoices ({invoices.length})
-          </div>
-        </button>
-      </div>
-
       {/* Search & Filter */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
           <input
             type="text"
-            placeholder={activeTab === 'sales' ? 'Search sale code, customer...' : 'Search invoice #, customer...'}
+            placeholder="Search sale code, invoice #, customer..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
           />
         </div>
-        {activeTab === 'invoices' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-zinc-500">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Pending">Pending</option>
-              <option value="Overdue">Overdue</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-zinc-500">Status:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="Paid">Paid</option>
+            <option value="Pending">Pending</option>
+            <option value="Overdue">Overdue</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
       </div>
 
-      {/* ============ SALES TAB ============ */}
-      {activeTab === 'sales' && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-x-auto">
-          {filteredSales.length === 0 ? (
-            <div className="p-12 text-center">
-              <ShoppingCart className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
-              <p className="text-sm font-mono text-zinc-500">No sales orders recorded.</p>
-              <p className="text-[10px] font-mono text-zinc-400 mt-1">Create a sale to bill a customer and deduct Finished Goods stock.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs font-mono border-collapse">
-              <thead>
-                <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-                  <th className="p-3 font-bold">Sale Code</th>
-                  <th className="p-3 font-bold">Customer Account</th>
-                  <th className="p-3 font-bold">Line Items</th>
-                  <th className="p-3 font-bold">Total Amount</th>
-                  <th className="p-3 font-bold">Date</th>
-                  <th className="p-3 font-bold">Auto-Invoice</th>
-                  <th className="p-3 font-bold">Status</th>
-                  <th className="p-3 font-bold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredSales.map((s, idx) => {
-                  const dispName = getCustomerDisplayName(s.customerId, s.customerName);
-                  const custObj = getCustomerObj(s.customerId);
-                  return (
-                    <tr key={`${s.id}-${idx}`} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                      <td className="p-3 font-bold text-zinc-900 dark:text-zinc-100">{s.saleCode}</td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
-                            {dispName.charAt(0).toUpperCase()}
+      {/* ============ SALES & BILLING TABLE ============ */}
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-x-auto">
+        {filteredSales.length === 0 ? (
+          <div className="p-12 text-center">
+            <ShoppingCart className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
+            <p className="text-sm font-mono text-zinc-500">No sales orders recorded.</p>
+            <p className="text-[10px] font-mono text-zinc-400 mt-1">Create a sale to bill a customer and deduct Finished Goods stock.</p>
+          </div>
+        ) : (
+          <table className="w-full text-left text-xs font-mono border-collapse">
+            <thead>
+              <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
+                <th className="p-3 font-bold">Invoice #</th>
+                <th className="p-3 font-bold">Customer Account</th>
+                <th className="p-3 font-bold">Line Items</th>
+                <th className="p-3 font-bold">Total Amount</th>
+                <th className="p-3 font-bold">Date</th>
+                <th className="p-3 font-bold">Status</th>
+                <th className="p-3 font-bold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+              {filteredSales.map((s, idx) => {
+                const dispName = getCustomerDisplayName(s.customerId, s.customerName);
+                const custObj = getCustomerObj(s.customerId);
+                return (
+                  <tr key={`${s.id}-${idx}`} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <td className="p-3">
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+                        {s.invoiceNumber || s.invoiceId || 'INV-PENDING'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          {dispName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-hanken font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                            {dispName}
                           </div>
-                          <div>
-                            <div className="font-hanken font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                              {dispName}
-                            </div>
-                            <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-1.5 mt-0.5">
-                              <span className="px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded font-semibold">
-                                {custObj?.type || 'Client'}
-                              </span>
-                              {custObj?.phone && (
-                                <span className="text-zinc-400">{custObj.phone}</span>
-                              )}
-                            </div>
+                          <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-1.5 mt-0.5">
+                            <span className="px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded font-semibold">
+                              {custObj?.type || 'Client'}
+                            </span>
+                            {(custObj?.phone || (s as any).customerPhone) && (
+                              <span className="text-zinc-400">{custObj?.phone || (s as any).customerPhone}</span>
+                            )}
                           </div>
                         </div>
-                      </td>
-                      <td className="p-3 text-zinc-700 dark:text-zinc-300">
-                        {s.items.map((item, i) => (
-                          <div key={i} className="text-[11px]">
-                            {item.quantity} × {item.productName} @ ₹{item.unitPrice}
-                          </div>
-                        ))}
-                      </td>
-                      <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                        ₹{s.totalAmount.toLocaleString('en-IN')}
-                      </td>
-                      <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.saleDate}</td>
-                      <td className="p-3">
-                        {s.invoiceId ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            GENERATED
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-zinc-400">—</span>
-                        )}
-                      </td>
-                      <td className="p-3"><Badge status={s.status} /></td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              const found = invoices.find(inv => inv.id === s.invoiceId || inv.saleId === s.id) || {
-                                id: `inv-${s.id}`,
-                                invoiceCode: `INV-${s.saleCode}`,
-                                invoiceNumber: `INV-${s.saleCode}`,
-                                customerId: s.customerId,
-                                customerName: s.customerName,
-                                client: s.customerName,
-                                amount: s.totalAmount,
-                                date: s.saleDate,
-                                status: 'Paid' as const,
-                                items: s.items.map(it => ({
-                                  finishedInventoryId: it.finishedInventoryId,
-                                  productName: it.productName,
-                                  quantity: it.quantity,
-                                  unitPrice: it.unitPrice,
-                                  total: it.total
-                                })),
-                                saleId: s.id
-                              };
-                              setViewingInvoice(found);
-                              setIsInvoiceModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                            title="View & Print Tax Invoice"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            INVOICE
-                          </button>
-                          <button
-                            onClick={() => setDeleteSaleCandidate(s)}
-                            className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            DELETE
-                          </button>
+                      </div>
+                    </td>
+                    <td className="p-3 text-zinc-700 dark:text-zinc-300">
+                      {s.items.map((item, i) => (
+                        <div key={i} className="text-[11px]">
+                          {item.quantity} × {item.productName} @ ₹{item.unitPrice}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {/* ============ INVOICES TAB ============ */}
-      {activeTab === 'invoices' && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-x-auto">
-          {filteredInvoices.length === 0 ? (
-            <div className="p-12 text-center">
-              <FileText className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
-              <p className="text-sm font-mono text-zinc-500">No invoices yet.</p>
-              <p className="text-[10px] font-mono text-zinc-400 mt-1">Invoices auto-generate when a customer sale is confirmed.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs font-mono border-collapse">
-              <thead>
-                <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-                  <th className="p-3 font-bold">Invoice #</th>
-                  <th className="p-3 font-bold">Client Account</th>
-                  <th className="p-3 font-bold">Line Items</th>
-                  <th className="p-3 font-bold">Amount</th>
-                  <th className="p-3 font-bold">Date</th>
-                  <th className="p-3 font-bold">Pipeline Source</th>
-                  <th className="p-3 font-bold">Status</th>
-                  <th className="p-3 font-bold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredInvoices.map((inv, idx) => {
-                  const dispName = getCustomerDisplayName(inv.customerId, inv.customerName || inv.client);
-                  return (
-                    <tr key={`${inv.id}-${idx}`} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                      <td className="p-3 font-bold text-zinc-900 dark:text-zinc-100">{inv.invoiceNumber || inv.invoiceCode}</td>
-                      <td className="p-3 font-bold text-zinc-900 dark:text-zinc-100 font-hanken text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{dispName}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-zinc-700 dark:text-zinc-300">
-                        {inv.items && inv.items.length > 0 ? (
-                          inv.items.map((item, i) => (
-                            <div key={i} className="text-[11px]">{item.quantity} × {item.productName}</div>
-                          ))
-                        ) : (
-                          <span className="text-[11px]">{inv.itemsSummary || `${inv.itemsCount || 0} items`}</span>
-                        )}
-                      </td>
-                      <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                        ₹{inv.amount.toLocaleString('en-IN')}
-                      </td>
-                      <td className="p-3 text-zinc-600 dark:text-zinc-400">{inv.date}</td>
-                      <td className="p-3">
-                        {inv.saleId ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded">
-                            <ArrowRight className="w-2.5 h-2.5" />
-                            FROM SALE
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-zinc-400">Direct</span>
-                        )}
-                      </td>
-                      <td className="p-3"><Badge status={inv.status} /></td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setViewingInvoice(inv);
-                              setIsInvoiceModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                            title="View & Print GST Tax Invoice"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            VIEW / PRINT
-                          </button>
-                          <button
-                            onClick={() => openInvEdit(inv)}
-                            className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            EDIT
-                          </button>
-                          <button
-                            onClick={() => setDeleteInvCandidate(inv)}
-                            className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            DELETE
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                      ))}
+                    </td>
+                    <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                      ₹{s.totalAmount.toLocaleString('en-IN')}
+                    </td>
+                    <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.saleDate}</td>
+                    <td className="p-3"><Badge status={s.status} /></td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => {
+                            const found = getSaleInvoiceObj(s);
+                            setViewingInvoice(found);
+                            setIsInvoiceModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                          title="View & Print Invoice"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          INVOICE
+                        </button>
+                        <button
+                          onClick={() => handleOpenWhatsAppForSale(s)}
+                          className="px-2.5 py-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] border border-[#25D366]/30 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Send invoice directly to customer on WhatsApp"
+                        >
+                          <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366]" />
+                          WHATSAPP
+                        </button>
+                        <button
+                          onClick={() => setDeleteSaleCandidate(s)}
+                          className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          DELETE
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {/* ============ CREATE SALE MODAL ============ */}
       <Modal
@@ -618,7 +535,7 @@ export const SalesManagementPage: React.FC = () => {
         subtitle="Select customer account, pick finished goods. Deducts stock and auto-creates invoice."
       >
         <form onSubmit={handleSaleSubmit} className="space-y-4">
-          
+
           {/* Customer Selection Section - ALWAYS VISIBLE */}
           <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
@@ -700,7 +617,7 @@ export const SalesManagementPage: React.FC = () => {
                   <Plus className="w-3.5 h-3.5" />
                   <span>Enter New Customer Details:</span>
                 </div>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1 sm:col-span-2">
                     <label className="text-[10px] font-mono font-bold uppercase text-zinc-500">Business / Customer Name *</label>
@@ -732,12 +649,21 @@ export const SalesManagementPage: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-mono font-bold uppercase text-zinc-500">Contact Phone</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-mono font-bold uppercase text-zinc-500">Contact Phone</label>
+                      <span className="text-[10px] font-mono text-zinc-400">10 digits</span>
+                    </div>
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]{10}"
+                      maxLength={10}
                       value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                      placeholder="+91 98200 11223"
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setNewCustomerPhone(cleaned);
+                      }}
+                      placeholder="9820011223"
                       className="w-full px-2 py-1.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded text-xs font-mono outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -747,13 +673,21 @@ export const SalesManagementPage: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-mono font-bold uppercase text-zinc-500">Sale Reference Code</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-mono font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                Sales Invoice Number
+              </label>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-800">
+                SEQUENTIAL &amp; EDITABLE
+              </span>
+            </div>
             <input
               type="text"
               required
-              value={saleCode}
-              onChange={(e) => setSaleCode(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
+              value={saleInvoiceNumber || nextInvoiceNumber}
+              onChange={(e) => setSaleInvoiceNumber(e.target.value)}
+              placeholder="e.g. INV-2026-0001"
+              className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-zinc-950 border border-emerald-300 dark:border-emerald-800 font-bold text-xs font-mono outline-none focus:border-emerald-500 text-emerald-900 dark:text-emerald-300"
             />
           </div>
 
@@ -787,21 +721,22 @@ export const SalesManagementPage: React.FC = () => {
                   <select
                     value={line.finishedInventoryId}
                     onChange={(e) => updateSaleLine(i, 'finishedInventoryId', e.target.value)}
-                    className="w-full px-2 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full px-2 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer font-medium"
                   >
+                    <option value="">-- Select Finished Garment Style / Product --</option>
                     {availableFinishedGoods.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {f.productName} — {f.availableQuantity} pcs in stock
+                        {f.productName} — {f.availableQuantity} pcs in stock (₹{f.unitPrice || 1200}/pc)
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="w-24 space-y-1">
-                  <label className="text-[10px] font-mono text-zinc-400 uppercase">Qty (Max: {line.maxQty})</label>
+                  <label className="text-[10px] font-mono text-zinc-400 uppercase">Qty {line.maxQty > 0 ? `(Max: ${line.maxQty})` : ''}</label>
                   <input
                     type="number"
                     min={1}
-                    max={line.maxQty}
+                    max={line.maxQty > 0 ? line.maxQty : undefined}
                     value={line.quantity}
                     onChange={(e) => updateSaleLine(i, 'quantity', e.target.value)}
                     className="w-full px-2 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
@@ -832,14 +767,164 @@ export const SalesManagementPage: React.FC = () => {
             ))}
 
             {saleLines.length > 0 && (
-              <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded">
-                <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                  TOTAL AMOUNT: ₹{saleTotalAmount.toLocaleString('en-IN')}
-                </span>
-                <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1">
-                  <ArrowRight className="w-3 h-3" />
-                  Invoice auto-generates immediately on confirm
-                </span>
+              <div className="space-y-3 pt-2">
+                {/* GST Option Selection */}
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                      GST Option:
+                    </label>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      Select tax slab to apply on invoice
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { rate: 0, label: '0% (Exempt/None)' },
+                      { rate: 5, label: '5% (Standard)' },
+                      { rate: 12, label: '12% (Higher)' },
+                      { rate: 18, label: '18% (Special)' }
+                    ].map(opt => (
+                      <button
+                        key={opt.rate}
+                        type="button"
+                        onClick={() => setSaleGstRate(opt.rate)}
+                        className={`py-1.5 px-2 text-xs font-mono font-bold rounded border transition-colors cursor-pointer text-center ${saleGstRate === opt.rate
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:border-emerald-500'
+                          }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Subtotal, GST & Total Summary */}
+                <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                    <span>Items Subtotal:</span>
+                    <span className="font-bold text-zinc-900 dark:text-zinc-100">₹{saleSubtotal.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                    <span>GST ({saleGstRate}%):</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                      {saleGstRate === 0 ? '₹0.00 (Exempt)' : `+₹${saleGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
+                  <div className="border-t border-emerald-200 dark:border-emerald-800/80 pt-2 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-mono font-extrabold text-emerald-800 dark:text-emerald-300 block">
+                        TOTAL INVOICE AMOUNT: ₹{saleGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1 mt-0.5">
+                        <ArrowRight className="w-3 h-3" />
+                        Invoice {saleInvoiceNumber || nextInvoiceNumber} auto-generates immediately on confirm
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Condition & Method of Payment */}
+                <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                      Payment Condition
+                    </label>
+                    <span className="text-[10px] font-mono text-zinc-500">Select payment status</span>
+                  </div>
+
+                  {/* Paid / Partial / Pending Tabs */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Paid', 'Partial', 'Pending'] as const).map((status) => {
+                      const isSelected = salePaymentStatus === status;
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => {
+                            setSalePaymentStatus(status);
+                            if (status === 'Paid') {
+                              setSalePaidAmount(saleGrandTotal);
+                            } else if (status === 'Pending') {
+                              setSalePaidAmount(0);
+                            }
+                          }}
+                          className={`py-2 px-2 text-xs font-mono font-bold rounded border transition-all cursor-pointer text-center ${isSelected
+                            ? status === 'Paid'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : status === 'Partial'
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                : 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:border-zinc-400'
+                            }`}
+                        >
+                          {status === 'Paid' && '✓ Paid'}
+                          {status === 'Partial' && '◐ Partial'}
+                          {status === 'Pending' && '⏳ Pending'}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Method of Payment & Partial Amount */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                        Method of Payment
+                      </label>
+                      <select
+                        value={salePaymentMethod}
+                        onChange={(e) => setSalePaymentMethod(e.target.value)}
+                        className="w-full h-9 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded text-xs font-mono text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-emerald-500 outline-none cursor-pointer"
+                      >
+                        <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                        <option value="UPI / QR">UPI / QR Code</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Cheque">Cheque</option>
+                        <option value="Card">Debit / Credit Card</option>
+                        <option value="Credit / On Account">Credit / On Account (Net 30)</option>
+                      </select>
+                    </div>
+
+                    {salePaymentStatus === 'Partial' ? (
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-[10px] font-mono font-bold text-amber-600 uppercase tracking-wider">
+                            Amount Paid (₹)
+                          </label>
+                          <span className="text-[10px] font-mono text-zinc-500">
+                            Due: ₹{Math.max(0, saleGrandTotal - (salePaidAmount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max={saleGrandTotal}
+                          step="0.01"
+                          value={salePaidAmount || ''}
+                          onChange={(e) => setSalePaidAmount(parseFloat(e.target.value) || 0)}
+                          placeholder="Enter amount paid"
+                          className="w-full h-9 px-2.5 bg-white dark:bg-zinc-900 border border-amber-400 dark:border-amber-700 rounded text-xs font-mono font-bold text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-amber-500 outline-none"
+                          required
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                          Settlement Summary
+                        </label>
+                        <div className="h-9 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded flex items-center text-xs font-mono font-bold">
+                          {salePaymentStatus === 'Paid' ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">Full Payment Received (₹{saleGrandTotal.toLocaleString('en-IN')})</span>
+                          ) : (
+                            <span className="text-rose-600 dark:text-rose-400">Pending Full Balance (₹{saleGrandTotal.toLocaleString('en-IN')})</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -928,21 +1013,12 @@ export const SalesManagementPage: React.FC = () => {
           isOpen={!!deleteSaleCandidate}
           onClose={() => setDeleteSaleCandidate(null)}
           onConfirm={() => deleteSale(deleteSaleCandidate.id)}
-          itemName={`Sale ${deleteSaleCandidate.saleCode} (${getCustomerDisplayName(deleteSaleCandidate.customerId, deleteSaleCandidate.customerName)})`}
+          itemName={`Invoice ${deleteSaleCandidate.invoiceNumber || deleteSaleCandidate.id} (${getCustomerDisplayName(deleteSaleCandidate.customerId, deleteSaleCandidate.customerName)}) — Sold inventory will be restored back to Finished Goods.`}
           itemType="Sale Order"
         />
       )}
-      {deleteInvCandidate && (
-        <ConfirmDeleteModal
-          isOpen={!!deleteInvCandidate}
-          onClose={() => setDeleteInvCandidate(null)}
-          onConfirm={() => deleteInvoice(deleteInvCandidate.id)}
-          itemName={`Invoice ${deleteInvCandidate.invoiceNumber || deleteInvCandidate.invoiceCode} (${getCustomerDisplayName(deleteInvCandidate.customerId, deleteInvCandidate.customerName || deleteInvCandidate.client)})`}
-          itemType="Invoice"
-        />
-      )}
 
-      {/* Tax Invoice View & Print Modal */}
+      {/* Printable Invoice View & Print Modal */}
       <TaxInvoiceModal
         isOpen={isInvoiceModalOpen}
         onClose={() => {
@@ -951,6 +1027,20 @@ export const SalesManagementPage: React.FC = () => {
         }}
         invoice={viewingInvoice}
         customer={activeCustomers.find(c => c.id === viewingInvoice?.customerId) || null}
+      />
+
+      {/* WhatsApp Share Modal */}
+      <WhatsAppShareModal
+        isOpen={!!whatsAppData}
+        onClose={() => setWhatsAppData(null)}
+        invoice={whatsAppData?.invoice || null}
+        customer={whatsAppData?.customer || null}
+        onViewInvoice={() => {
+          if (whatsAppData?.invoice) {
+            setViewingInvoice(whatsAppData.invoice);
+            setIsInvoiceModalOpen(true);
+          }
+        }}
       />
     </div>
   );

@@ -46,6 +46,8 @@ import {
   seedFirestoreDatabase
 } from '../services/firebaseService';
 import { sortLatest } from '../utils/sortUtils';
+import { getNextInvoiceNumber } from '../lib/invoiceUtils';
+import { getNextSupplierId } from '../utils/supplierUtils';
 
 interface FabriqDataContextType {
   // Firebase state flag & error tracking
@@ -119,7 +121,7 @@ interface FabriqDataContextType {
   // === Connected Pipeline CRUD ===
   updateRawInventoryItem: (item: RawInventoryItem) => void;
   updateFinishedInventoryItem: (item: FinishedInventoryItem) => void;
-  addSale: (sale: Omit<SaleOrder, 'id' | 'createdAt' | 'invoiceId'>) => Promise<void>;
+  addSale: (sale: Omit<SaleOrder, 'id' | 'createdAt' | 'invoiceId'>) => Promise<{ sale: SaleOrder; invoice: Invoice }>;
   updateSale: (sale: SaleOrder) => void;
   deleteSale: (id: string) => void;
 
@@ -248,7 +250,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id: (userData as AppUser).id || `u-${Date.now()}`,
       createdAt: (userData as AppUser).createdAt || new Date().toISOString().substring(0, 10),
       lastLogin: (userData as AppUser).lastLogin || 'Never',
-      pin: userData.pin || '1234'
+      pin: userData.pin || ''
     };
 
     setUsers(prev => sortLatest([newU, ...prev.filter(u => u.id !== newU.id)]));
@@ -309,17 +311,114 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateWarehouse = (data: Warehouse) => {
+    const oldWarehouse = warehouses.find(w => w.id === data.id);
+    const oldName = oldWarehouse?.name?.trim();
+    const oldCode = oldWarehouse?.code?.trim();
+    const newName = data.name.trim();
+
     setWarehouses(prev => prev.map(w => w.id === data.id ? data : w));
+
+    if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      // 1. Cascade to Purchases
+      setPurchases(prev => prev.map(p => {
+        const pWh = (p.warehouse || '').trim();
+        const pWhLoc = (p.warehouseLocation || '').trim();
+        const matches = pWh.toLowerCase() === oldName.toLowerCase() || (oldCode && pWh.toLowerCase() === oldCode.toLowerCase()) ||
+                        pWhLoc.toLowerCase() === oldName.toLowerCase() || (oldCode && pWhLoc.toLowerCase() === oldCode.toLowerCase());
+        if (matches) {
+          const updatedP = { ...p, warehouse: newName, warehouseLocation: newName };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PURCHASES, updatedP, updatedP.id).catch(console.error);
+          return updatedP;
+        }
+        return p;
+      }));
+
+      // 2. Cascade to Raw Inventory
+      setRawInventory(prev => prev.map(r => {
+        const rWh = (r.warehouse || '').trim();
+        if (rWh.toLowerCase() === oldName.toLowerCase() || (oldCode && rWh.toLowerCase() === oldCode.toLowerCase())) {
+          const updatedR = { ...r, warehouse: newName };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, updatedR, updatedR.id).catch(console.error);
+          return updatedR;
+        }
+        return r;
+      }));
+
+      // 3. Cascade to Finished Goods Inventory
+      setFinishedInventory(prev => prev.map(f => {
+        const fWh = (f.warehouse || '').trim();
+        if (fWh.toLowerCase() === oldName.toLowerCase() || (oldCode && fWh.toLowerCase() === oldCode.toLowerCase())) {
+          const updatedF = { ...f, warehouse: newName };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.FINISHED_INVENTORY, updatedF, updatedF.id).catch(console.error);
+          return updatedF;
+        }
+        return f;
+      }));
+
+      // 4. Cascade to Production Orders
+      setProductionOrders(prev => prev.map(po => {
+        let poWh = (po.warehouse || '').trim();
+        let poGodown = (po.godown || '').trim();
+        let changed = false;
+        if (poWh.toLowerCase() === oldName.toLowerCase() || (oldCode && poWh.toLowerCase() === oldCode.toLowerCase())) {
+          poWh = newName;
+          changed = true;
+        }
+        if (poGodown.toLowerCase() === oldName.toLowerCase() || (oldCode && poGodown.toLowerCase() === oldCode.toLowerCase())) {
+          poGodown = newName;
+          changed = true;
+        }
+        if (changed) {
+          const updatedPo = { ...po, warehouse: poWh, godown: poGodown };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PRODUCTION_ORDERS, updatedPo, updatedPo.id).catch(console.error);
+          return updatedPo;
+        }
+        return po;
+      }));
+    }
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.WAREHOUSES, data).catch(console.error);
-    addAuditLog('Admin', 'WAREHOUSE_UPDATE', 'Master Data', `Updated facility details for ${data.name}`);
+    addAuditLog('Admin', 'WAREHOUSE_UPDATE', 'Master Data', `Updated facility details for ${data.name} (Cascaded to linked purchases, inventory & orders)`);
   };
 
   const deleteWarehouse = (id: string) => {
     const target = warehouses.find(w => w.id === id);
+    const targetName = target?.name?.trim();
+    const targetCode = target?.code?.trim();
+    const fallbackWarehouse = warehouses.find(w => w.id !== id)?.name || 'Main Godown';
+
     setWarehouses(prev => prev.filter(w => w.id !== id));
+
+    if (targetName) {
+      // Reassign inventory and purchases from deleted warehouse to fallback warehouse
+      setPurchases(prev => prev.map(p => {
+        const pWh = (p.warehouse || '').trim().toLowerCase();
+        if (pWh === targetName.toLowerCase() || (targetCode && pWh === targetCode.toLowerCase())) {
+          return { ...p, warehouse: fallbackWarehouse, warehouseLocation: fallbackWarehouse };
+        }
+        return p;
+      }));
+
+      setRawInventory(prev => prev.map(r => {
+        const rWh = (r.warehouse || '').trim().toLowerCase();
+        if (rWh === targetName.toLowerCase() || (targetCode && rWh === targetCode.toLowerCase())) {
+          return { ...r, warehouse: fallbackWarehouse };
+        }
+        return r;
+      }));
+
+      setFinishedInventory(prev => prev.map(f => {
+        const fWh = (f.warehouse || '').trim().toLowerCase();
+        if (fWh === targetName.toLowerCase() || (targetCode && fWh === targetCode.toLowerCase())) {
+          return { ...f, warehouse: fallbackWarehouse };
+        }
+        return f;
+      }));
+    }
+
     if (isFirebaseConfigured) removeDocument(COLLECTIONS.WAREHOUSES, id).catch(console.error);
     if (target) {
-      addAuditLog('Admin', 'WAREHOUSE_DELETE', 'Master Data', `Deleted warehouse ${target.name}`);
+      addAuditLog('Admin', 'WAREHOUSE_DELETE', 'Master Data', `Deleted warehouse ${target.name} (Stock reassigned to ${fallbackWarehouse})`);
     }
   };
 
@@ -339,9 +438,93 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateContractor = (data: Contractor) => {
+    const oldContractor = contractors.find(c => c.id === data.id);
+    const oldName = oldContractor?.name?.trim();
+    const newName = data.name.trim();
+
     setContractors(prev => prev.map(c => c.id === data.id ? data : c));
+
+    // Cascade to active production orders and stage execution histories
+    setProductionOrders(prev => prev.map(po => {
+      let changed = false;
+      let updatedAssignedTo = po.assignedTo;
+      let updatedContractorName = po.contractorName;
+      let updatedCutting = po.cuttingContractor;
+      let updatedStitching = po.stitchingContractor;
+      let updatedWashing = po.washingContractor;
+      let updatedPackaging = po.packagingContractor;
+      const updatedStageContractors = { ...(po.stageContractors || {}) };
+
+      if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+        if (po.contractorName?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedContractorName = newName;
+          changed = true;
+        }
+        if (po.assignedTo?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedAssignedTo = newName;
+          changed = true;
+        }
+        if (po.cuttingContractor?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedCutting = newName;
+          changed = true;
+        }
+        if (po.stitchingContractor?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedStitching = newName;
+          changed = true;
+        }
+        if (po.washingContractor?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedWashing = newName;
+          changed = true;
+        }
+        if (po.packagingContractor?.trim().toLowerCase() === oldName.toLowerCase()) {
+          updatedPackaging = newName;
+          changed = true;
+        }
+        Object.keys(updatedStageContractors).forEach(k => {
+          if (updatedStageContractors[k]?.trim().toLowerCase() === oldName.toLowerCase()) {
+            updatedStageContractors[k] = newName;
+            changed = true;
+          }
+        });
+      }
+
+      // Update stageHistory entries matching contractorId or contractorName
+      const updatedStageHistory = (po.stageHistory || []).map(entry => {
+        const matchesId = entry.contractorId && entry.contractorId === data.id;
+        const matchesName = oldName && entry.contractorName?.trim().toLowerCase() === oldName.toLowerCase();
+        if (matchesId || matchesName) {
+          changed = true;
+          return {
+            ...entry,
+            contractorId: data.id,
+            contractorName: newName,
+            contractorPhone: data.phone || entry.contractorPhone,
+            contractorLocation: data.location || entry.contractorLocation
+          };
+        }
+        return entry;
+      });
+
+      if (changed) {
+        const updatedPo: ProductionOrder = {
+          ...po,
+          assignedTo: updatedAssignedTo,
+          contractorName: updatedContractorName,
+          cuttingContractor: updatedCutting,
+          stitchingContractor: updatedStitching,
+          washingContractor: updatedWashing,
+          packagingContractor: updatedPackaging,
+          stageContractors: updatedStageContractors,
+          stageHistory: updatedStageHistory
+        };
+        if (isFirebaseConfigured) saveDocument(COLLECTIONS.PRODUCTION_ORDERS, updatedPo, updatedPo.id).catch(console.error);
+        return updatedPo;
+      }
+      return po;
+    }));
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.CONTRACTORS, data).catch(console.error);
-    addAuditLog('Admin', 'CONTRACTOR_UPDATE', 'Master Data', `Updated contractor ${data.name}`);
+    addAuditLog('Admin', 'CONTRACTOR_UPDATE', 'Master Data', `Updated contractor ${data.name} (Cascaded to active production orders & stage history)`);
   };
 
   const deleteContractor = (id: string) => {
@@ -355,8 +538,11 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Supplier Actions
   const addSupplier = (data: Omit<Supplier, 'id'> & { id?: string }) => {
-    const newId = data.id?.trim() || `sup-${Date.now()}`;
-    const cleanCode = data.code?.trim() || data.supplierId?.trim() || newId;
+    let cleanCode = data.code?.trim() || data.supplierId?.trim();
+    if (!cleanCode || cleanCode.match(/^sup-\d{5,}$/i)) {
+      cleanCode = getNextSupplierId(suppliers);
+    }
+    const newId = data.id?.trim() && !data.id.match(/^sup-\d{5,}$/i) ? data.id.trim() : cleanCode;
     const newS: Supplier = {
       ...data,
       id: newId,
@@ -371,10 +557,41 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateSupplier = (data: Supplier) => {
     const cleanCode = data.code?.trim() || data.supplierId?.trim() || data.id;
+    const oldSupplier = suppliers.find(s => s.id === data.id);
+    const oldName = oldSupplier?.name?.trim();
+    const newName = data.name.trim();
     const updated: Supplier = { ...data, code: cleanCode, supplierId: cleanCode };
+
     setSuppliers(prev => prev.map(s => s.id === data.id ? updated : s));
+
+    if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      // 1. Cascade to Purchases
+      setPurchases(prev => prev.map(p => {
+        const pSuppName = typeof p.supplier === 'string' ? p.supplier : p.supplier?.name;
+        if (pSuppName && pSuppName.trim().toLowerCase() === oldName.toLowerCase()) {
+          const updatedP = {
+            ...p,
+            supplier: typeof p.supplier === 'object' ? { ...p.supplier, name: newName } : newName
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PURCHASES, updatedP, updatedP.id).catch(console.error);
+          return updatedP;
+        }
+        return p;
+      }));
+
+      // 2. Cascade to Raw Inventory
+      setRawInventory(prev => prev.map(r => {
+        if (r.supplierName && r.supplierName.trim().toLowerCase() === oldName.toLowerCase()) {
+          const updatedR = { ...r, supplierName: newName };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, updatedR, updatedR.id).catch(console.error);
+          return updatedR;
+        }
+        return r;
+      }));
+    }
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.SUPPLIERS, updated, data.id).catch(console.error);
-    addAuditLog('Admin', 'SUPPLIER_UPDATE', 'Master Data', `Updated supplier ${data.name} (${cleanCode})`);
+    addAuditLog('Admin', 'SUPPLIER_UPDATE', 'Master Data', `Updated supplier ${data.name} (${cleanCode}) → Cascaded to purchases & raw inventory`);
   };
 
   const deleteSupplier = (id: string) => {
@@ -402,9 +619,48 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateCustomer = (data: Customer) => {
+    const oldCustomer = customers.find(c => c.id === data.id);
+    const oldName = oldCustomer?.name?.trim();
+    const newName = data.name.trim();
+
     setCustomers(prev => prev.map(c => c.id === data.id ? data : c));
+
+    if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      // 1. Cascade to Sales Orders
+      setSales(prev => prev.map(s => {
+        if (s.customerName && s.customerName.trim().toLowerCase() === oldName.toLowerCase()) {
+          const updatedS = {
+            ...s,
+            customerName: newName,
+            customerPhone: data.phone || s.customerPhone,
+            shippingAddress: data.address || s.shippingAddress
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.SALES, updatedS, updatedS.id).catch(console.error);
+          return updatedS;
+        }
+        return s;
+      }));
+
+      // 2. Cascade to Invoices
+      setInvoices(prev => prev.map(inv => {
+        if (inv.customerName && inv.customerName.trim().toLowerCase() === oldName.toLowerCase()) {
+          const updatedInv = {
+            ...inv,
+            client: newName,
+            customerName: newName,
+            customerPhone: data.phone || inv.customerPhone,
+            customerAddress: data.address || inv.customerAddress,
+            customerGstin: data.gstin || inv.customerGstin
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.INVOICES, updatedInv, updatedInv.id).catch(console.error);
+          return updatedInv;
+        }
+        return inv;
+      }));
+    }
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.CUSTOMERS, data).catch(console.error);
-    addAuditLog('Admin', 'CUSTOMER_UPDATE', 'Master Data', `Updated customer account ${data.name}`);
+    addAuditLog('Admin', 'CUSTOMER_UPDATE', 'Master Data', `Updated customer account ${data.name} → Cascaded to sales & invoices`);
   };
 
   const deleteCustomer = (id: string) => {
@@ -422,30 +678,35 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Helper to compile RawInventoryItems from a Purchase (one per fabric item)
   const buildRawItemsFromPurchase = (p: Purchase): RawInventoryItem[] => {
     const billOrInv = p.billNumber || p.invoiceNumber || `BILL-${Date.now().toString().slice(-4)}`;
-    const warehouse = p.warehouse;
-    const supplierName = p.supplier?.name || 'Supplier';
+    const warehouse = p.warehouse?.trim() || p.warehouseLocation?.trim() || 'Main Godown';
+    const supplierName = typeof p.supplier === 'string' ? p.supplier : (p.supplier?.name || 'Supplier');
 
-    if (p.items && p.items.length > 0) {
-      return p.items.map((item, index) => {
-        const itemMeters = Number(item.meters) || 0;
+    // Filter valid fabric items (with name or meters)
+    const validItems = (p.items || []).filter(
+      it => (Number(it.meters) || 0) > 0 || (it.fabricName && it.fabricName.trim().length > 0)
+    );
+
+    if (validItems.length > 0) {
+      return validItems.map((item, index) => {
+        const itemMeters = Number(item.meters) || Number(p.meters) || 0;
         const rawInvStatus = itemMeters > 200 ? 'Available' : (itemMeters > 0 ? 'Low' : 'Depleted');
-        const rawInvId = item.id || `rinv-${p.id}-${index}`;
+        const rawInvId = `rinv-${p.id}-${index}`;
         return {
           id: rawInvId,
           purchaseId: p.id,
-          batchId: billOrInv,
+          batchId: p.invoiceNumber || p.billNumber || billOrInv,
           billNumber: p.billNumber || billOrInv,
-          invoiceNumber: billOrInv,
-          fabricName: item.fabricName || 'Raw Fabric',
-          width: item.width,
+          invoiceNumber: p.invoiceNumber || p.billNumber || billOrInv,
+          fabricName: item.fabricName || p.fabricName || 'Raw Fabric',
+          width: item.width || p.width || '58"',
           supplierName,
           totalMeters: itemMeters,
           availableMeters: itemMeters,
           allocatedMeters: 0,
           warehouse,
-          costPerMeter: Number(item.rate) || 0,
+          costPerMeter: Number(item.rate) || Number(p.rate) || 0,
           status: rawInvStatus as RawInventoryItem['status'],
-          createdAt: p.createdAt || new Date().toISOString()
+          createdAt: p.createdAt || p.purchaseDate || new Date().toISOString()
         };
       });
     }
@@ -453,13 +714,13 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const meters = Number(p.meters) || 0;
     const rawInvStatus = meters > 200 ? 'Available' : (meters > 0 ? 'Low' : 'Depleted');
     return [{
-      id: `rinv-${p.id}`,
+      id: `rinv-${p.id}-0`,
       purchaseId: p.id,
-      batchId: billOrInv,
+      batchId: p.invoiceNumber || p.billNumber || billOrInv,
       billNumber: p.billNumber || billOrInv,
-      invoiceNumber: billOrInv,
+      invoiceNumber: p.invoiceNumber || p.billNumber || billOrInv,
       fabricName: p.fabricName || 'Raw Fabric',
-      width: p.width,
+      width: p.width || '58"',
       supplierName,
       totalMeters: meters,
       availableMeters: meters,
@@ -467,9 +728,69 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       warehouse,
       costPerMeter: Number(p.rate) || 0,
       status: rawInvStatus as RawInventoryItem['status'],
-      createdAt: p.createdAt || new Date().toISOString()
+      createdAt: p.createdAt || p.purchaseDate || new Date().toISOString()
     }];
   };
+
+  // Auto-reconcile Raw Inventory from purchases:
+  // Guarantees all Received purchases have corresponding raw inventory items in state & Firestore,
+  // and guarantees warehouse storage location and supplier details stay synchronized.
+  useEffect(() => {
+    if (!purchases || purchases.length === 0) return;
+
+    const receivedPurchases = purchases.filter(p => p.status === 'Received' || !p.status);
+    if (receivedPurchases.length === 0) return;
+
+    setRawInventory(prev => {
+      let changed = false;
+      const updatedList = [...prev];
+
+      receivedPurchases.forEach(p => {
+        const targetWarehouse = (p.warehouse || p.warehouseLocation || 'Main Godown').trim();
+        const matchingExisting = updatedList.filter(
+          r => r.purchaseId === p.id ||
+               r.id === `rinv-${p.id}` ||
+               r.id.startsWith(`rinv-${p.id}-`) ||
+               (p.billNumber && (r.billNumber === p.billNumber || r.batchId === p.billNumber || r.purchaseId === p.billNumber)) ||
+               (p.invoiceNumber && (r.invoiceNumber === p.invoiceNumber || r.batchId === p.invoiceNumber || r.purchaseId === p.invoiceNumber))
+        );
+
+        if (matchingExisting.length === 0) {
+          const newItems = buildRawItemsFromPurchase(p);
+          if (newItems.length > 0) {
+            updatedList.push(...newItems);
+            changed = true;
+            if (isFirebaseConfigured && db) {
+              newItems.forEach(item => {
+                saveDocument(COLLECTIONS.RAW_INVENTORY, item, item.id).catch(console.error);
+              });
+            }
+          }
+        } else {
+          // Align warehouse location and supplier if out of sync
+          matchingExisting.forEach(ex => {
+            if (targetWarehouse && ex.warehouse?.trim().toLowerCase() !== targetWarehouse.toLowerCase()) {
+              ex.warehouse = targetWarehouse;
+              changed = true;
+              if (isFirebaseConfigured && db) {
+                saveDocument(COLLECTIONS.RAW_INVENTORY, ex, ex.id).catch(console.error);
+              }
+            }
+            const suppName = typeof p.supplier === 'string' ? p.supplier : p.supplier?.name;
+            if (suppName && ex.supplierName?.trim().toLowerCase() !== suppName.trim().toLowerCase()) {
+              ex.supplierName = suppName.trim();
+              changed = true;
+              if (isFirebaseConfigured && db) {
+                saveDocument(COLLECTIONS.RAW_INVENTORY, ex, ex.id).catch(console.error);
+              }
+            }
+          });
+        }
+      });
+
+      return changed ? updatedList : prev;
+    });
+  }, [purchases]);
 
   const addPurchase = (data: Omit<Purchase, 'id' | 'createdAt'> | Purchase) => {
     const purchaseId = (data as Purchase).id || `p-${Date.now()}`;
@@ -504,7 +825,10 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (isReceived) {
       generatedRawItems = buildRawItemsFromPurchase(newP);
       // Clean previous items for this purchase and insert the newly generated ones
-      setRawInventory(prev => [...generatedRawItems, ...prev.filter(r => r.purchaseId !== purchaseId)]);
+      setRawInventory(prev => [
+        ...generatedRawItems,
+        ...prev.filter(r => r.purchaseId !== purchaseId && !r.id.startsWith(`rinv-${purchaseId}`))
+      ]);
     }
 
     if (isFirebaseConfigured && db) {
@@ -521,7 +845,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setFirebaseError(err?.message || 'Error saving purchase');
         });
       } else {
-        saveDocument(COLLECTIONS.PURCHASES, newP).catch(console.error);
+        saveDocument(COLLECTIONS.PURCHASES, newP, purchaseId).catch(console.error);
       }
     }
 
@@ -533,47 +857,134 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updatePurchase = (data: Purchase) => {
+    const oldPurchase = purchases.find(p => p.id === data.id);
+    const newWarehouse = (data.warehouse || data.warehouseLocation || 'Main Godown').trim();
+
     setPurchases(prev => prev.map(p => p.id === data.id ? data : p));
 
-    // When marked as Received, ensure stock is created/synced in Raw Inventory
-    if (data.status === 'Received') {
+    // Comprehensive predicate to find all raw inventory items corresponding to this purchase
+    const isMatchingRawItem = (r: RawInventoryItem) => {
+      if (!r) return false;
+      if (r.purchaseId === data.id) return true;
+      if (r.id === `rinv-${data.id}` || r.id.startsWith(`rinv-${data.id}-`)) return true;
+      if (oldPurchase) {
+        if (oldPurchase.id && r.purchaseId === oldPurchase.id) return true;
+        if (oldPurchase.billNumber && (r.purchaseId === oldPurchase.billNumber || r.billNumber === oldPurchase.billNumber || r.batchId === oldPurchase.billNumber)) return true;
+        if (oldPurchase.invoiceNumber && (r.purchaseId === oldPurchase.invoiceNumber || r.invoiceNumber === oldPurchase.invoiceNumber || r.batchId === oldPurchase.invoiceNumber)) return true;
+      }
+      if (data.billNumber && (r.purchaseId === data.billNumber || r.billNumber === data.billNumber || r.batchId === data.billNumber)) return true;
+      if (data.invoiceNumber && (r.purchaseId === data.invoiceNumber || r.invoiceNumber === data.invoiceNumber || r.batchId === data.invoiceNumber)) return true;
+      return false;
+    };
+
+    let syncedRawIds: string[] = [];
+
+    // When marked as Received, ensure stock is created/synced in Raw Inventory with the NEW warehouse location
+    if (data.status === 'Received' || !data.status) {
       const generatedRawItems = buildRawItemsFromPurchase(data);
+
       setRawInventory(prev => {
-        const syncedItems = generatedRawItems.map(newR => {
-          const existing = prev.find(r => r.id === newR.id || (r.purchaseId === data.id && r.fabricName === newR.fabricName));
-          if (existing) {
-            return {
-              ...newR,
-              id: existing.id,
-              allocatedMeters: existing.allocatedMeters,
-              availableMeters: Math.max(0, newR.totalMeters - existing.allocatedMeters)
-            };
-          }
-          return newR;
+        const existingMatches = prev.filter(isMatchingRawItem);
+
+        const syncedItems = generatedRawItems.map((newR, idx) => {
+          const existing = existingMatches.find(r => r.id === newR.id || r.fabricName?.trim().toLowerCase() === newR.fabricName?.trim().toLowerCase()) || existingMatches[idx];
+          const allocated = existing ? (Number(existing.allocatedMeters) || 0) : 0;
+          const total = Number(newR.totalMeters) || 0;
+          const avail = Math.max(0, total - allocated);
+          const rawStatus = avail > 200 ? 'Available' : (avail > 0 ? 'Low' : 'Depleted');
+
+          return {
+            ...newR,
+            id: existing ? existing.id : newR.id,
+            warehouse: newWarehouse, // Updated warehouse location!
+            allocatedMeters: allocated,
+            availableMeters: avail,
+            status: rawStatus as RawInventoryItem['status'],
+            supplierName: typeof data.supplier === 'string' ? data.supplier : (data.supplier?.name || 'Supplier'),
+            billNumber: data.billNumber || newR.billNumber,
+            invoiceNumber: data.invoiceNumber || data.billNumber || newR.invoiceNumber,
+            batchId: data.invoiceNumber || data.billNumber || newR.batchId
+          };
         });
+
+        syncedRawIds = syncedItems.map(s => s.id);
 
         if (isFirebaseConfigured && db) {
           syncedItems.forEach(rawItem => {
-            saveDocument(COLLECTIONS.RAW_INVENTORY, rawItem).catch(console.error);
+            saveDocument(COLLECTIONS.RAW_INVENTORY, rawItem, rawItem.id).catch(console.error);
+          });
+          existingMatches.forEach(oldR => {
+            if (!syncedRawIds.includes(oldR.id)) {
+              removeDocument(COLLECTIONS.RAW_INVENTORY, oldR.id).catch(console.error);
+            }
           });
         }
 
-        return [...syncedItems, ...prev.filter(r => r.purchaseId !== data.id)];
+        // Clean out ALL old records matching this purchase and replace with synced items in the new warehouse
+        return [...syncedItems, ...prev.filter(r => !isMatchingRawItem(r))];
+      });
+    } else {
+      // If purchase status is no longer Received, remove all corresponding raw inventory stock
+      setRawInventory(prev => {
+        const toDelete = prev.filter(isMatchingRawItem);
+        if (isFirebaseConfigured && db) {
+          toDelete.forEach(r => removeDocument(COLLECTIONS.RAW_INVENTORY, r.id).catch(console.error));
+        }
+        return prev.filter(r => !isMatchingRawItem(r));
       });
     }
 
-    if (isFirebaseConfigured) saveDocument(COLLECTIONS.PURCHASES, data).catch(console.error);
-    addAuditLog('Admin', 'PURCHASE_OVERRIDE', 'Purchase Management', `Updated purchase bill ${data.billNumber} (Status: ${data.status})`);
+    // Cascade to active Production Orders linked to this purchase or its raw items
+    setProductionOrders(prev => prev.map(po => {
+      const isLinkedPo = (po.rawInventoryId && syncedRawIds.includes(po.rawInventoryId)) ||
+        (oldPurchase && (po.rawBatchId === oldPurchase.billNumber || po.rawBatchId === oldPurchase.invoiceNumber)) ||
+        (data.billNumber && po.rawBatchId === data.billNumber);
+
+      if (isLinkedPo) {
+        return {
+          ...po,
+          rawBatchId: data.billNumber || data.invoiceNumber || po.rawBatchId,
+          fabricName: data.fabricName || po.fabricName,
+          warehouse: (po.currentStage === 'Cutting' || !po.currentStage) ? newWarehouse : po.warehouse
+        };
+      }
+      return po;
+    }));
+
+    if (isFirebaseConfigured) saveDocument(COLLECTIONS.PURCHASES, data, data.id).catch(console.error);
+    addAuditLog('Admin', 'PURCHASE_OVERRIDE', 'Purchase Management', `Updated purchase bill ${data.billNumber} (Storage: ${newWarehouse}, Status: ${data.status}) → Raw inventory transferred to ${newWarehouse}`);
   };
 
   const deletePurchase = (id: string) => {
     const target = purchases.find(p => p.id === id);
+
+    // Identify all corresponding raw inventory items created by/linked to this purchase
+    const isMatchingRawItem = (r: RawInventoryItem) => {
+      if (r.purchaseId === id) return true;
+      if (r.id === `rinv-${id}` || r.id.startsWith(`rinv-${id}-`)) return true;
+      if (target) {
+        if (target.billNumber && (r.purchaseId === target.billNumber || r.billNumber === target.billNumber || r.batchId === target.billNumber)) return true;
+        if (target.invoiceNumber && (r.purchaseId === target.invoiceNumber || r.invoiceNumber === target.invoiceNumber || r.batchId === target.invoiceNumber)) return true;
+      }
+      return false;
+    };
+
+    const rawItemsToDelete = rawInventory.filter(isMatchingRawItem);
+
+    // Remove purchase and all corresponding inventory items from state
     setPurchases(prev => prev.filter(p => p.id !== id));
-    // Also remove any raw inventory created by this purchase
-    setRawInventory(prev => prev.filter(r => r.purchaseId !== id));
-    if (isFirebaseConfigured) removeDocument(COLLECTIONS.PURCHASES, id).catch(console.error);
+    setRawInventory(prev => prev.filter(r => !isMatchingRawItem(r)));
+
+    // Clean up Firebase documents for both the purchase and all corresponding raw inventory
+    if (isFirebaseConfigured) {
+      removeDocument(COLLECTIONS.PURCHASES, id).catch(console.error);
+      rawItemsToDelete.forEach(rawItem => {
+        removeDocument(COLLECTIONS.RAW_INVENTORY, rawItem.id).catch(console.error);
+      });
+    }
+
     if (target) {
-      addAuditLog('Admin', 'PURCHASE_DELETE', 'Purchase Management', `Permanently deleted purchase bill ${target.billNumber}`);
+      addAuditLog('Admin', 'PURCHASE_DELETE', 'Purchase Management', `Permanently deleted purchase bill ${target.billNumber} and corresponding inventory items (${rawItemsToDelete.length} raw inventory records removed)`);
     }
   };
 
@@ -689,7 +1100,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           challanNumber: existingProduct.challanNumber && newO.challanNumber && !existingProduct.challanNumber.includes(newO.challanNumber)
             ? `${existingProduct.challanNumber}, ${newO.challanNumber}`
             : existingProduct.challanNumber || newO.challanNumber,
-          warehouse: newO.warehouse || existingProduct.warehouse || 'Finished Goods Godown'
+          warehouse: newO.warehouse || newO.godown || existingProduct.warehouse || (warehouses[0]?.name || '')
         };
         setFinishedInventory(prev => prev.map(f => f.id === existingProduct.id ? finItemToAdd! : f));
       } else {
@@ -706,7 +1117,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           unitsAvailable: goodQty,
           soldQuantity: 0,
           unitPrice: 1200,
-          warehouse: newO.warehouse || 'Finished Goods Godown',
+          warehouse: newO.warehouse || newO.godown || (warehouses[0]?.name || ''),
           status: goodQty > 0 ? 'In Stock' : 'Sold Out',
           createdAt: new Date().toISOString()
         };
@@ -745,6 +1156,48 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const isNowCompleted = data.status === 'Completed' || data.overallStatus === 'Completed' || data.currentStage === 'Finished Goods';
     const shouldCreateFinished = isNowCompleted && (!data.finishedInventoryCreated || wasNotCompleted);
 
+    // Reconcile raw inventory allocation if rawInventoryId or metersAllocated changed
+    const prevAllocatedMeters = Number(prevOrder?.metersAllocated || prevOrder?.metersRequired || 0);
+    const newAllocatedMeters = Number(data.metersAllocated || data.metersRequired || 0);
+    const prevRawId = prevOrder?.rawInventoryId;
+    const newRawId = data.rawInventoryId;
+
+    if ((prevRawId || newRawId) && (prevRawId !== newRawId || prevAllocatedMeters !== newAllocatedMeters)) {
+      setRawInventory(prev => {
+        return prev.map(r => {
+          // If changing to another raw item, restore previous raw item
+          if (prevRawId && r.id === prevRawId && prevRawId !== newRawId) {
+            const avail = Number(r.availableMeters || 0) + prevAllocatedMeters;
+            const alloc = Math.max(0, Number(r.allocatedMeters || 0) - prevAllocatedMeters);
+            const status: RawInventoryItem['status'] = avail > 200 ? 'Available' : (avail > 0 ? 'Low' : 'Depleted');
+            const updated = { ...r, availableMeters: avail, allocatedMeters: alloc, status };
+            if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, updated, updated.id).catch(console.error);
+            return updated;
+          }
+          // If changing to another raw item, deduct on new raw item
+          if (newRawId && r.id === newRawId && prevRawId !== newRawId) {
+            const avail = Math.max(0, Number(r.availableMeters || 0) - newAllocatedMeters);
+            const alloc = Number(r.allocatedMeters || 0) + newAllocatedMeters;
+            const status: RawInventoryItem['status'] = avail > 200 ? 'Available' : (avail > 0 ? 'Low' : 'Depleted');
+            const updated = { ...r, availableMeters: avail, allocatedMeters: alloc, status };
+            if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, updated, updated.id).catch(console.error);
+            return updated;
+          }
+          // If same raw item, adjust delta
+          if (newRawId && r.id === newRawId && prevRawId === newRawId && prevAllocatedMeters !== newAllocatedMeters) {
+            const delta = newAllocatedMeters - prevAllocatedMeters;
+            const avail = Math.max(0, Number(r.availableMeters || 0) - delta);
+            const alloc = Math.max(0, Number(r.allocatedMeters || 0) + delta);
+            const status: RawInventoryItem['status'] = avail > 200 ? 'Available' : (avail > 0 ? 'Low' : 'Depleted');
+            const updated = { ...r, availableMeters: avail, allocatedMeters: alloc, status };
+            if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, updated, updated.id).catch(console.error);
+            return updated;
+          }
+          return r;
+        });
+      });
+    }
+
     let finItem: FinishedInventoryItem | null = null;
     let orderToSave: ProductionOrder = {
       ...data,
@@ -760,6 +1213,9 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         f => (f.productName || f.itemName || '').trim().toLowerCase() === targetProductName.toLowerCase()
       );
 
+      const targetUnitPrice = Number(data.unitPrice || data.pricePerPiece || (existingProduct ? existingProduct.unitPrice : 1200));
+      const targetWarehouse = (data.warehouse || data.godown || (existingProduct ? existingProduct.warehouse : (warehouses[0]?.name || ''))).trim();
+
       if (existingProduct) {
         // ADD inventory to the SAME product
         const newProduced = (Number(existingProduct.totalProduced ?? existingProduct.unitsProduced ?? 0)) + goodQty;
@@ -771,14 +1227,15 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           availableQuantity: newAvailable,
           unitsProduced: newProduced,
           unitsAvailable: newAvailable,
+          unitPrice: targetUnitPrice > 0 ? targetUnitPrice : (existingProduct.unitPrice || 1200),
+          warehouse: targetWarehouse || existingProduct.warehouse || (warehouses[0]?.name || ''),
           status: newAvailable > 0 ? (newAvailable < 20 ? 'Low Stock' : 'In Stock') : 'Sold Out',
           productionOrderId: existingProduct.productionOrderId && !existingProduct.productionOrderId.includes(data.id)
             ? `${existingProduct.productionOrderId}, ${data.id}`
             : existingProduct.productionOrderId || data.id,
           challanNumber: existingProduct.challanNumber && data.challanNumber && !existingProduct.challanNumber.includes(data.challanNumber)
             ? `${existingProduct.challanNumber}, ${data.challanNumber}`
-            : existingProduct.challanNumber || data.challanNumber,
-          warehouse: data.warehouse || existingProduct.warehouse || 'Finished Goods Godown'
+            : existingProduct.challanNumber || data.challanNumber
         };
 
         setFinishedInventory(prev => prev.map(f => f.id === existingProduct.id ? finItem! : f));
@@ -795,8 +1252,8 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           unitsProduced: goodQty,
           unitsAvailable: goodQty,
           soldQuantity: 0,
-          unitPrice: 1200, // Standard unit price
-          warehouse: data.warehouse || 'Finished Goods Godown',
+          unitPrice: targetUnitPrice,
+          warehouse: targetWarehouse,
           status: goodQty > 0 ? 'In Stock' : 'Sold Out',
           createdAt: new Date().toISOString()
         };
@@ -804,8 +1261,33 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setFinishedInventory(prev => [finItem!, ...prev.filter(f => f.id !== finId)]);
       }
 
+      const baseChallan = (orderToSave.challanNumber || `CH-2026-${orderToSave.id.slice(-4)}`).replace(/-(CUT|STT|WSH|PKG|FG|STG\d+)$/i, '');
+      const fgChallan = `${baseChallan}-FG`;
+
+      const hist = [...(orderToSave.stageHistory || [])];
+      if (!hist.some(s => s.stageName === 'Finished Goods')) {
+        hist.push({
+          stageName: 'Finished Goods',
+          contractorId: 'GODOWN',
+          contractorName: targetWarehouse || orderToSave.warehouse || 'Finished Goods Warehouse',
+          contractorPhone: '',
+          contractorLocation: targetWarehouse || orderToSave.warehouse || 'Central Godown',
+          quantitySent: goodQty,
+          quantityReceived: goodQty,
+          quantityCompleted: goodQty,
+          rejectedQuantity: 0,
+          wastageQuantity: 0,
+          assignedDate: new Date().toISOString().substring(0, 10),
+          completedDate: new Date().toISOString().substring(0, 10),
+          challanNumber: fgChallan,
+          status: 'Completed',
+          remarks: `Finished goods inwarded under Challan ${fgChallan}`
+        });
+      }
+
       orderToSave = {
         ...orderToSave,
+        challanNumber: fgChallan,
         finishedInventoryCreated: true,
         inventoryTransferred: true,
         overallStatus: 'Completed',
@@ -813,7 +1295,8 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         currentStage: 'Finished Goods',
         stage: 'Finished Goods',
         progress: 100,
-        finalQuantity: goodQty
+        finalQuantity: goodQty,
+        stageHistory: hist
       };
 
       setProductionOrders(prev => prev.map(o => o.id === data.id ? orderToSave : o));
@@ -843,9 +1326,144 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const deleteProductionOrder = (id: string) => {
     const target = productionOrders.find(o => o.id === id);
     setProductionOrders(prev => prev.filter(o => o.id !== id));
-    if (isFirebaseConfigured) removeDocument(COLLECTIONS.PRODUCTION_ORDERS, id).catch(console.error);
+
+    let updatedRaw: RawInventoryItem | null = null;
+    let metersToRestore = 0;
+
+    let updatedFin: FinishedInventoryItem | null = null;
+    let removeFinId: string | null = null;
+    let goodQty = 0;
+
     if (target) {
-      addAuditLog('Admin', 'PRODUCTION_DELETE', 'Production Management', `Deleted production order ${target.orderCode || target.poCode} (Challan: ${target.challanNumber || 'N/A'})`);
+      // 1. Restore Raw Fabric Inventory (allocated meters)
+      metersToRestore = Number(target.metersAllocated || target.metersRequired || (target as any).meters || 0);
+
+      if (metersToRestore > 0) {
+        const existingRaw = rawInventory.find(r => r.id === target.rawInventoryId) ||
+          (target.rawBatchId ? rawInventory.find(r => r.batchId === target.rawBatchId || r.invoiceNumber === target.rawBatchId || r.billNumber === target.rawBatchId) : undefined) ||
+          (target.fabricName ? rawInventory.find(r => r.fabricName?.trim().toLowerCase() === target.fabricName?.trim().toLowerCase()) : undefined);
+
+        if (existingRaw) {
+          const curAvailable = Number(existingRaw.availableMeters || 0);
+          const curAllocated = Number(existingRaw.allocatedMeters || 0);
+          const newAvailable = curAvailable + metersToRestore;
+          const newAllocated = Math.max(0, curAllocated - metersToRestore);
+          const newStatus: RawInventoryItem['status'] = newAvailable <= 0 ? 'Depleted' : (newAvailable < 200 ? 'Low' : 'Available');
+
+          updatedRaw = {
+            ...existingRaw,
+            availableMeters: newAvailable,
+            allocatedMeters: newAllocated,
+            status: newStatus
+          };
+
+          setRawInventory(prev => prev.map(r => r.id === existingRaw.id ? updatedRaw! : r));
+        }
+      }
+
+      // 2. Rollback Finished Goods Inventory if order was completed/transferred
+      const hasCompleted = target.finishedInventoryCreated || target.inventoryTransferred ||
+        target.currentStage === 'Finished Goods' || target.stage === 'Finished Goods' ||
+        target.status === 'Completed' || target.overallStatus === 'Completed';
+
+      goodQty = Number(target.finalQuantity || target.completedQuantity || target.completed || target.plannedQuantity || target.quantity || target.total || 0);
+
+      if (hasCompleted && goodQty > 0) {
+        const targetProdName = (target.productName || target.producedItemName || target.styleName || target.name || '').trim().toLowerCase();
+
+        const existingFin = finishedInventory.find(f => f.productionOrderId && f.productionOrderId.split(',').map(s => s.trim()).includes(target.id)) ||
+          (target.challanNumber ? finishedInventory.find(f => f.challanNumber && f.challanNumber.split(',').map(s => s.trim()).includes(target.challanNumber)) : undefined) ||
+          (targetProdName ? finishedInventory.find(f => (f.productName || f.itemName || '').trim().toLowerCase() === targetProdName) : undefined);
+
+        if (existingFin) {
+          const curProduced = Number(existingFin.totalProduced ?? existingFin.unitsProduced ?? 0);
+          const curAvailable = Number(existingFin.availableQuantity ?? existingFin.unitsAvailable ?? 0);
+          const curSold = Number(existingFin.soldQuantity ?? 0);
+
+          const newProduced = Math.max(0, curProduced - goodQty);
+          const newAvailable = Math.max(0, curAvailable - goodQty);
+
+          const isSoleRecord = existingFin.productionOrderId === target.id || !existingFin.productionOrderId?.includes(',');
+
+          if (isSoleRecord && newAvailable <= 0 && curSold === 0) {
+            removeFinId = existingFin.id;
+            setFinishedInventory(prev => prev.filter(f => f.id !== existingFin.id));
+          } else {
+            const updatedPoIds = (existingFin.productionOrderId || '')
+              .split(',')
+              .map(s => s.trim())
+              .filter(s => s && s !== target.id)
+              .join(', ');
+            const updatedChallans = (existingFin.challanNumber || '')
+              .split(',')
+              .map(s => s.trim())
+              .filter(s => s && s !== target.challanNumber)
+              .join(', ');
+
+            updatedFin = {
+              ...existingFin,
+              totalProduced: newProduced,
+              availableQuantity: newAvailable,
+              unitsProduced: newProduced,
+              unitsAvailable: newAvailable,
+              status: newAvailable > 0 ? (newAvailable < 20 ? 'Low Stock' : 'In Stock') : 'Sold Out',
+              productionOrderId: updatedPoIds,
+              challanNumber: updatedChallans
+            };
+
+            setFinishedInventory(prev => prev.map(f => f.id === existingFin.id ? updatedFin! : f));
+          }
+        }
+      }
+    }
+
+    // 3. Sync persistence with Firebase Firestore
+    if (isFirebaseConfigured && db) {
+      const batch = writeBatch(db);
+      const poRef = doc(db, COLLECTIONS.PRODUCTION_ORDERS, id);
+      batch.delete(poRef);
+
+      if (updatedRaw) {
+        const rawRef = doc(db, COLLECTIONS.RAW_INVENTORY, updatedRaw.id);
+        batch.update(rawRef, {
+          availableMeters: updatedRaw.availableMeters,
+          allocatedMeters: updatedRaw.allocatedMeters,
+          status: updatedRaw.status
+        });
+      }
+
+      if (removeFinId) {
+        const finRef = doc(db, COLLECTIONS.FINISHED_INVENTORY, removeFinId);
+        batch.delete(finRef);
+      } else if (updatedFin) {
+        const finRef = doc(db, COLLECTIONS.FINISHED_INVENTORY, updatedFin.id);
+        batch.set(finRef, JSON.parse(JSON.stringify(updatedFin)), { merge: true });
+      }
+
+      batch.commit().catch(err => {
+        console.error('Firebase error rolling back inventory on production order delete:', err);
+      });
+    } else if (isFirebaseConfigured) {
+      removeDocument(COLLECTIONS.PRODUCTION_ORDERS, id).catch(console.error);
+    }
+
+    // 4. Audit Log
+    if (target) {
+      let rollbackMsg = '';
+      if (updatedRaw) {
+        rollbackMsg += ` | Restored ${metersToRestore}m back to Raw Fabric (${updatedRaw.fabricName || updatedRaw.batchId})`;
+      }
+      if (removeFinId) {
+        rollbackMsg += ` | Cleaned up empty Finished Goods entry`;
+      } else if (updatedFin) {
+        rollbackMsg += ` | Deducted ${goodQty} pcs from Finished Goods (${updatedFin.productName})`;
+      }
+      addAuditLog(
+        'Admin',
+        'PRODUCTION_DELETE',
+        'Production Management',
+        `Deleted production order ${target.orderCode || target.poCode} (Challan: ${target.challanNumber || 'N/A'})${rollbackMsg}`
+      );
     }
   };
 
@@ -853,22 +1471,100 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Raw Inventory & Finished Inventory Corrections
   // =====================================================================
   const updateRawInventoryItem = (item: RawInventoryItem) => {
+    const oldItem = rawInventory.find(r => r.id === item.id);
+    const newWh = item.warehouse?.trim();
+    const oldWh = oldItem?.warehouse?.trim();
+    const newFabric = item.fabricName?.trim();
+    const oldFabric = oldItem?.fabricName?.trim();
+    const isWhChanged = Boolean(newWh && oldWh && newWh.toLowerCase() !== oldWh.toLowerCase());
+    const isFabricChanged = Boolean(newFabric && oldFabric && newFabric.toLowerCase() !== oldFabric.toLowerCase());
+
     setRawInventory(prev => prev.map(r => r.id === item.id ? item : r));
+
+    // If warehouse or fabric name changed, cascade to linked purchases
+    if (isWhChanged || isFabricChanged) {
+      setPurchases(prev => prev.map(p => {
+        const isLinked = (item.purchaseId && (p.id === item.purchaseId || p.billNumber === item.purchaseId || p.invoiceNumber === item.purchaseId)) ||
+          item.id === `rinv-${p.id}` || item.id.startsWith(`rinv-${p.id}-`) ||
+          (item.billNumber && (p.billNumber === item.billNumber || p.id === item.billNumber)) ||
+          (item.batchId && (p.billNumber === item.batchId || p.invoiceNumber === item.batchId));
+
+        if (isLinked) {
+          const updatedP: Purchase = {
+            ...p,
+            warehouse: isWhChanged ? newWh! : (p.warehouse || newWh!),
+            warehouseLocation: isWhChanged ? newWh! : (p.warehouseLocation || newWh!),
+            fabricName: isFabricChanged ? newFabric! : (p.fabricName || newFabric!),
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PURCHASES, updatedP, updatedP.id).catch(console.error);
+          return updatedP;
+        }
+        return p;
+      }));
+
+      // Also cascade to production orders using this raw inventory item
+      setProductionOrders(prev => prev.map(po => {
+        const isLinked = po.rawInventoryId === item.id || (po as any).fabricSourceInventoryId === item.id ||
+          (item.batchId && po.rawBatchId === item.batchId);
+        if (isLinked) {
+          const updatedPo = {
+            ...po,
+            warehouse: isWhChanged ? newWh! : po.warehouse,
+            godown: isWhChanged ? newWh! : (po as any).godown,
+            fabricName: isFabricChanged ? newFabric! : po.fabricName
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PRODUCTION_ORDERS, updatedPo, updatedPo.id).catch(console.error);
+          return updatedPo;
+        }
+        return po;
+      }));
+    }
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.RAW_INVENTORY, item).catch(console.error);
-    addAuditLog('Admin', 'RAW_INVENTORY_UPDATE', 'Inventory Management', `Corrected raw inventory ${item.batchId} (${item.availableMeters}m available)`);
+    addAuditLog('Admin', 'RAW_INVENTORY_UPDATE', 'Inventory Management', `Corrected raw inventory ${item.batchId || item.fabricName} (Location: ${item.warehouse}, ${item.availableMeters}m available)`);
   };
 
   const updateFinishedInventoryItem = (item: FinishedInventoryItem) => {
+    const oldItem = finishedInventory.find(f => f.id === item.id);
+    const newWh = item.warehouse?.trim();
+    const oldWh = oldItem?.warehouse?.trim();
+    const newProduct = item.productName?.trim();
+    const oldProduct = oldItem?.productName?.trim();
+    const isWhChanged = Boolean(newWh && oldWh && newWh.toLowerCase() !== oldWh.toLowerCase());
+    const isProductChanged = Boolean(newProduct && oldProduct && newProduct.toLowerCase() !== oldProduct.toLowerCase());
+
     setFinishedInventory(prev => prev.map(f => f.id === item.id ? item : f));
+
+    // If warehouse or product name changed, cascade to linked production orders
+    if (isWhChanged || isProductChanged) {
+      setProductionOrders(prev => prev.map(po => {
+        const isLinked = (item.productionOrderId && item.productionOrderId.split(',').map(s => s.trim()).includes(po.id)) ||
+          (item.challanNumber && po.challanNumber && item.challanNumber.split(',').map(s => s.trim()).includes(po.challanNumber)) ||
+          (oldProduct && (po.productName || (po as any).producedItemName)?.trim().toLowerCase() === oldProduct.toLowerCase());
+
+        if (isLinked) {
+          const updatedPo = {
+            ...po,
+            destinationWarehouse: isWhChanged ? newWh! : (po as any).destinationWarehouse,
+            warehouse: isWhChanged ? newWh! : po.warehouse,
+            productName: isProductChanged ? newProduct! : po.productName
+          };
+          if (isFirebaseConfigured) saveDocument(COLLECTIONS.PRODUCTION_ORDERS, updatedPo, updatedPo.id).catch(console.error);
+          return updatedPo;
+        }
+        return po;
+      }));
+    }
+
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.FINISHED_INVENTORY, item).catch(console.error);
-    addAuditLog('Admin', 'FINISHED_INVENTORY_UPDATE', 'Inventory Management', `Corrected finished inventory ${item.productName} (${item.availableQuantity} pcs available)`);
+    addAuditLog('Admin', 'FINISHED_INVENTORY_UPDATE', 'Inventory Management', `Corrected finished inventory ${item.productName} (Location: ${item.warehouse}, ${item.availableQuantity} pcs available)`);
   };
 
   // =====================================================================
   // 4. PIPELINE: Finished Inventory → Sales
   // 5. PIPELINE: Sales → Invoice (auto-generation)
   // =====================================================================
-  const addSale = async (saleData: Omit<SaleOrder, 'id' | 'createdAt' | 'invoiceId'>) => {
+  const addSale = async (saleData: Omit<SaleOrder, 'id' | 'createdAt' | 'invoiceId'>): Promise<{ sale: SaleOrder; invoice: Invoice }> => {
     const saleId = `sale-${Date.now()}`;
     const invoiceId = `inv-${Date.now() + 1}`;
     const now = new Date().toISOString();
@@ -881,10 +1577,35 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       total: item.total
     }));
 
+    const invNumber = saleData.invoiceNumber?.trim() || getNextInvoiceNumber(invoices);
+    const subtotal = saleData.subtotal ?? (saleData.items || []).reduce((sum, item) => sum + (item.total || (item.quantity * item.unitPrice)), 0);
+    const gstRate = saleData.gstRate ?? 0;
+    const gstAmount = saleData.gstAmount ?? Math.round((subtotal * (gstRate / 100)) * 100) / 100;
+    const grandTotal = saleData.grandTotal ?? saleData.totalAmount ?? (subtotal + gstAmount);
+
+    const customerObj = customers.find(c => c.id === saleData.customerId) ||
+      customers.find(c => (c.name || c.companyName || '').toLowerCase() === (saleData.customerName || '').toLowerCase());
+    const resolvedPhone = saleData.customerPhone || customerObj?.phone || '';
+
+    const finalPaymentStatus = saleData.paymentStatus || 'Pending';
+    const finalPaymentMethod = saleData.paymentMethod || saleData.paymentMode || 'Bank Transfer';
+    const finalPaidAmount = saleData.paidAmount ?? (finalPaymentStatus === 'Paid' ? grandTotal : 0);
+
     const newSale: SaleOrder = {
       ...saleData,
       id: saleId,
       invoiceId: invoiceId,
+      invoiceNumber: invNumber,
+      customerPhone: resolvedPhone,
+      subtotal,
+      gstRate,
+      gstAmount,
+      grandTotal,
+      totalAmount: grandTotal,
+      paymentStatus: finalPaymentStatus,
+      paymentMethod: finalPaymentMethod,
+      paymentMode: finalPaymentMethod,
+      paidAmount: finalPaidAmount,
       createdAt: now
     };
 
@@ -893,16 +1614,26 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       client: saleData.customerName,
       customerName: saleData.customerName,
       customerId: saleData.customerId,
-      date: now.substring(0, 10),
-      invoiceCode: `INV-${Date.now().toString().slice(-4)}`,
-      invoiceNumber: `INV-${Date.now().toString().slice(-4)}`,
-      amount: saleData.totalAmount,
-      status: 'Pending',
+      customerPhone: resolvedPhone,
+      customerAddress: saleData.shippingAddress || customerObj?.address,
+      customerGstin: customerObj?.gstin,
+      date: saleData.orderDate || saleData.saleDate || now.substring(0, 10),
+      issueDate: saleData.orderDate || saleData.saleDate || now.substring(0, 10),
+      invoiceCode: invNumber,
+      invoiceNumber: invNumber,
+      amount: grandTotal,
+      subtotal: subtotal,
+      taxRate: gstRate,
+      taxAmount: gstAmount,
+      totalAmount: grandTotal,
+      status: finalPaymentStatus === 'Paid' ? 'Paid' : 'Pending',
       itemsCount: saleData.items.reduce((sum, item) => sum + item.quantity, 0),
       itemsSummary: saleData.items.map(item => `${item.quantity} × ${item.productName}`).join(', '),
       saleId: saleId,
       items: invoiceItems,
-      paymentMode: 'Bank Transfer'
+      lineItems: invoiceItems,
+      paymentMethod: finalPaymentMethod,
+      paymentMode: finalPaymentMethod
     };
 
     // Deduct finished inventory locally
@@ -976,22 +1707,144 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
     }
 
-    addAuditLog('Admin', 'SALE_CREATE', 'Sales & Billing', `Sold ${newInvoice.itemsCount} pcs to ${saleData.customerName} (₹${saleData.totalAmount}) → Invoice ${newInvoice.invoiceNumber} auto-generated, Finished Goods deducted.`);
+    addAuditLog('Admin', 'SALE_CREATE', 'Sales & Billing', `Sold ${newInvoice.itemsCount} pcs to ${saleData.customerName} (₹${newSale.totalAmount}) → Invoice ${newInvoice.invoiceNumber} auto-generated, Finished Goods deducted.`);
+    return { sale: newSale, invoice: newInvoice };
   };
 
   const updateSale = (data: SaleOrder) => {
     setSales(prev => prev.map(s => s.id === data.id ? data : s));
     if (isFirebaseConfigured) saveDocument(COLLECTIONS.SALES, data).catch(console.error);
-    addAuditLog('Admin', 'SALE_UPDATE', 'Sales & Billing', `Updated sale ${data.saleCode}`);
+    addAuditLog('Admin', 'SALE_UPDATE', 'Sales & Billing', `Updated sale invoice ${data.invoiceNumber || data.id}`);
   };
 
   const deleteSale = (id: string) => {
     const target = sales.find(s => s.id === id);
-    setSales(prev => prev.filter(s => s.id !== id));
-    if (isFirebaseConfigured) removeDocument(COLLECTIONS.SALES, id).catch(console.error);
-    if (target) {
-      addAuditLog('Admin', 'SALE_DELETE', 'Sales & Billing', `Deleted sale order ${target.saleCode}`);
+    if (!target) return;
+
+    // Extract items that were sold in this order to restore their quantities back to inventory
+    const itemsToRestore: Array<{ finishedInventoryId?: string; productName?: string; itemName?: string; quantity: number }> = [];
+    if (Array.isArray(target.items) && target.items.length > 0) {
+      target.items.forEach((it: any) => {
+        itemsToRestore.push({
+          finishedInventoryId: it.finishedInventoryId,
+          productName: it.productName || it.itemName,
+          itemName: it.itemName || it.productName,
+          quantity: Number(it.quantity) || 0
+        });
+      });
+    } else if (Array.isArray(target.lineItems) && target.lineItems.length > 0) {
+      target.lineItems.forEach((it: any) => {
+        itemsToRestore.push({
+          finishedInventoryId: it.finishedInventoryId,
+          productName: it.productName || it.itemName,
+          itemName: it.itemName || it.productName,
+          quantity: Number(it.quantity) || 0
+        });
+      });
+    } else if ((target as any).productName || (target as any).quantity) {
+      itemsToRestore.push({
+        finishedInventoryId: (target as any).finishedInventoryId,
+        productName: (target as any).productName || (target as any).itemName,
+        itemName: (target as any).itemName || (target as any).productName,
+        quantity: Number((target as any).quantity) || 0
+      });
     }
+
+    // 1. Restore finished inventory quantities in local state
+    if (itemsToRestore.length > 0) {
+      setFinishedInventory(prev => {
+        const remainingToRestore = new Map<string, number>();
+        itemsToRestore.forEach(it => {
+          if (!it.finishedInventoryId) {
+            const key = (it.productName || it.itemName || '').trim().toLowerCase();
+            remainingToRestore.set(key, (remainingToRestore.get(key) || 0) + it.quantity);
+          }
+        });
+
+        return prev.map(f => {
+          const byId = itemsToRestore.find(it => it.finishedInventoryId && it.finishedInventoryId === f.id);
+          const key = (f.productName || f.itemName || '').trim().toLowerCase();
+          const qtyToRestore = byId ? byId.quantity : (remainingToRestore.get(key) || 0);
+
+          if (qtyToRestore > 0) {
+            const curAvail = f.availableQuantity ?? f.unitsAvailable ?? 0;
+            const curSold = f.soldQuantity ?? f.unitsSold ?? 0;
+            const newAvail = curAvail + qtyToRestore;
+            const newSold = Math.max(0, curSold - qtyToRestore);
+            if (!byId) {
+              remainingToRestore.set(key, Math.max(0, (remainingToRestore.get(key) || 0) - qtyToRestore));
+            }
+            const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low Stock' : 'In Stock');
+            return {
+              ...f,
+              availableQuantity: newAvail,
+              unitsAvailable: newAvail,
+              soldQuantity: newSold,
+              unitsSold: newSold,
+              status: newStatus as FinishedInventoryItem['status']
+            };
+          }
+          return f;
+        });
+      });
+    }
+
+    // 2. Remove sale from local state
+    setSales(prev => prev.filter(s => s.id !== id));
+
+    // 3. Remove associated auto-generated invoice if present
+    setInvoices(prev => prev.filter(inv => 
+      inv.saleId !== id && 
+      (!target.invoiceNumber || inv.invoiceNumber !== target.invoiceNumber) && 
+      (!target.saleCode || inv.invoiceCode !== target.saleCode)
+    ));
+
+    // 4. Update Firebase / Firestore
+    if (isFirebaseConfigured && db) {
+      const batch = writeBatch(db);
+      const saleRef = doc(db, COLLECTIONS.SALES, id);
+      batch.delete(saleRef);
+
+      const matchedInv = invoices.find(inv => 
+        inv.saleId === id || 
+        (target.invoiceNumber && inv.invoiceNumber === target.invoiceNumber) || 
+        (target.saleCode && inv.invoiceCode === target.saleCode)
+      );
+      if (matchedInv) {
+        const invRef = doc(db, COLLECTIONS.INVOICES, matchedInv.id);
+        batch.delete(invRef);
+      }
+
+      for (const item of itemsToRestore) {
+        if (item.quantity <= 0) continue;
+        const finItem = finishedInventory.find(f => 
+          (item.finishedInventoryId && f.id === item.finishedInventoryId) || 
+          ((f.productName || f.itemName || '').trim().toLowerCase() === (item.productName || item.itemName || '').trim().toLowerCase())
+        );
+        if (finItem) {
+          const curAvail = finItem.availableQuantity ?? finItem.unitsAvailable ?? 0;
+          const curSold = finItem.soldQuantity ?? finItem.unitsSold ?? 0;
+          const newAvail = curAvail + item.quantity;
+          const newSold = Math.max(0, curSold - item.quantity);
+          const newStatus = newAvail <= 0 ? 'Sold Out' : (newAvail < 20 ? 'Low Stock' : 'In Stock');
+          const finRef = doc(db, COLLECTIONS.FINISHED_INVENTORY, finItem.id);
+          batch.update(finRef, {
+            availableQuantity: newAvail,
+            unitsAvailable: newAvail,
+            soldQuantity: newSold,
+            unitsSold: newSold,
+            status: newStatus
+          });
+        }
+      }
+
+      batch.commit().catch(err => {
+        console.error('Firebase error deleting sale and restoring inventory:', err);
+      });
+    }
+
+    const totalQtyRestored = itemsToRestore.reduce((sum, it) => sum + it.quantity, 0);
+    addAuditLog('Admin', 'SALE_DELETE', 'Sales & Billing', `Deleted sale invoice ${target.invoiceNumber || target.id}. Restored ${totalQtyRestored} pcs back to Finished Goods inventory.`);
   };
 
   // Stock / Legacy Items Actions

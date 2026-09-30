@@ -30,6 +30,11 @@ export const EmployeeApp: React.FC = () => {
     return document.documentElement.classList.contains('dark');
   });
 
+  // Complete screen navigation states for tabs
+  const [productionInitialView, setProductionInitialView] = useState<'list' | 'create'>('list');
+  const [salesInitialView, setSalesInitialView] = useState<'list' | 'create'>('list');
+  const [purchasesInitialView, setPurchasesInitialView] = useState<'list' | 'create'>('list');
+
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeFormType, setActiveFormType] = useState<'new_order' | 'add_stock' | 'invoice' | 'new_purchase' | 'add_customer' | null>(null);
@@ -50,8 +55,23 @@ export const EmployeeApp: React.FC = () => {
     setIsDarkMode(prev => !prev);
   };
 
-  // Open forms modals
+  // Open forms modals or complete screens
   const handleOpenQuickActionForm = (type: 'new_order' | 'add_stock' | 'invoice' | 'new_purchase' | 'add_customer') => {
+    if (type === 'new_order') {
+      setProductionInitialView('create');
+      setActiveTab('production');
+      return;
+    }
+    if (type === 'invoice') {
+      setSalesInitialView('create');
+      setActiveTab('sales');
+      return;
+    }
+    if (type === 'new_purchase') {
+      setPurchasesInitialView('create');
+      setActiveTab('purchases');
+      return;
+    }
     setActiveFormType(type);
     setIsModalOpen(true);
   };
@@ -68,7 +88,6 @@ export const EmployeeApp: React.FC = () => {
       itemName: newStockData.name,
       category: 'Raw Fabric',
       warehouse: newStockData.location || 'Godown A - Main Mill',
-      rackLocation: 'Section B',
       availableUnits: newStockData.availableUnits,
       minThreshold: 100,
       costPrice: newStockData.unitPrice || 250,
@@ -116,6 +135,8 @@ export const EmployeeApp: React.FC = () => {
           <ProductionTab
             key="production"
             orders={productionOrders}
+            initialView={productionInitialView}
+            onClearInitialView={() => setProductionInitialView('list')}
           />
         )}
 
@@ -128,13 +149,20 @@ export const EmployeeApp: React.FC = () => {
         {activeTab === 'purchases' && (
           <PurchasesTab
             key="purchases"
+            initialView={purchasesInitialView}
+            onClearInitialView={() => setPurchasesInitialView('list')}
           />
         )}
 
         {activeTab === 'sales' && (
           <SalesTab
             key="sales"
-            onAddInvoiceClick={() => handleOpenQuickActionForm('invoice')}
+            initialView={salesInitialView}
+            onClearInitialView={() => setSalesInitialView('list')}
+            onAddInvoiceClick={() => {
+              setSalesInitialView('create');
+              setActiveTab('sales');
+            }}
           />
         )}
 

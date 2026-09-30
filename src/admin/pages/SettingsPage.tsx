@@ -17,9 +17,6 @@ export const SettingsPage: React.FC = () => {
           <h1 className="font-hanken font-bold text-xl text-zinc-900 dark:text-zinc-100 tracking-tight">
             Security Audit Log Directory
           </h1>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">
-            Real-time immutable log of administrator overrides, data modifications, and employee system events.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="px-3 py-1.5 text-xs font-mono font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded">

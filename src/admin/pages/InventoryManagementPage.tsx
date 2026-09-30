@@ -378,11 +378,10 @@ export const InventoryManagementPage: React.FC = () => {
             <button
               type="button"
               onClick={handleExportRawExcel}
-              className={`px-3.5 py-2 border font-mono font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer ${
-                downloadSuccessRaw
+              className={`px-3.5 py-2 border font-mono font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer ${downloadSuccessRaw
                   ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
                   : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200'
-              }`}
+                }`}
               title="Download Raw Materials Inventory as Excel spreadsheet"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -392,11 +391,10 @@ export const InventoryManagementPage: React.FC = () => {
             <button
               type="button"
               onClick={handleExportFinishedExcel}
-              className={`px-3.5 py-2 border font-mono font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer ${
-                downloadSuccessFin
+              className={`px-3.5 py-2 border font-mono font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer ${downloadSuccessFin
                   ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
                   : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200'
-              }`}
+                }`}
               title="Download Finished Goods Inventory as Excel spreadsheet"
             >
               <FileSpreadsheet className="w-4 h-4 text-sky-600 dark:text-sky-400" />
@@ -410,11 +408,10 @@ export const InventoryManagementPage: React.FC = () => {
       <div className="flex gap-0 border-b border-zinc-200 dark:border-zinc-800">
         <button
           onClick={() => setActiveTab('raw')}
-          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'raw'
+          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${activeTab === 'raw'
               ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
               : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <Layers className="w-3.5 h-3.5" />
@@ -423,11 +420,10 @@ export const InventoryManagementPage: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('finished')}
-          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'finished'
+          className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${activeTab === 'finished'
               ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
               : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <Factory className="w-3.5 h-3.5" />

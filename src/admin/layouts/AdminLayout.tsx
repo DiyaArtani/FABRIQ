@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useFabriqData } from '../../context/FabriqDataContext';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 
 export const AdminLayout: React.FC = () => {
   const { adminUser, logoutAdmin } = useAdminAuth();
@@ -190,7 +191,9 @@ export const AdminLayout: React.FC = () => {
 
         {/* Dynamic Page Outlet */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <Outlet />
+          <ErrorBoundary fallbackTitle="Error loading Admin view">
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

@@ -15,20 +15,35 @@ import {
   Box,
   FileText,
   Plus,
-  ArrowRight
+  ArrowRight,
+  User,
+  Phone,
+  MapPin
 } from 'lucide-react';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { ProductionChallanModal } from '../components/ProductionChallanModal';
 import { AdvanceStageModal } from '../../admin/components/AdvanceStageModal';
+import CreateProductionScreen from '../features/production/screens/CreateProductionScreen';
 import { sortLatest } from '../../utils/sortUtils';
 
 interface ProductionTabProps {
   key?: string;
   orders: ProductionOrder[];
+  initialView?: 'list' | 'create';
+  onClearInitialView?: () => void;
 }
 
-export default function ProductionTab({ orders }: ProductionTabProps) {
+export default function ProductionTab({ orders, initialView, onClearInitialView }: ProductionTabProps) {
   const { contractors, rawInventory, purchases, finishedInventory, addProductionOrder, updateProductionOrder } = useFabriqData();
+
+  const [view, setView] = useState<'list' | 'create'>(initialView || 'list');
+
+  React.useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+      if (onClearInitialView) onClearInitialView();
+    }
+  }, [initialView, onClearInitialView]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
@@ -37,43 +52,6 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
   // Modals state
   const [challanModalOrder, setChallanModalOrder] = useState<ProductionOrder | null>(null);
   const [advanceStageOrder, setAdvanceStageOrder] = useState<ProductionOrder | null>(null);
-
-  // Create Modal State
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [orderCode, setOrderCode] = useState('');
-  const [challanNumber, setChallanNumber] = useState('');
-  const [styleName, setStyleName] = useState('');
-  const [quantity, setQuantity] = useState(0);
-  const [contractorName, setContractorName] = useState('');
-  const [startDate, setStartDate] = useState(new Date().toISOString().substring(0, 10));
-  const [estimatedCompletion, setEstimatedCompletion] = useState('');
-  const [selectedRawInventoryId, setSelectedRawInventoryId] = useState('');
-  const [metersRequired, setMetersRequired] = useState(0);
-
-  // Available raw materials for dropdown (excludes completely allocated fabric)
-  const availableRawMaterials = useMemo(() => {
-    return rawInventory.filter(
-      r => r.availableMeters > 0 && r.status !== 'Depleted' && (r.totalMeters === 0 || r.allocatedMeters < r.totalMeters)
-    );
-  }, [rawInventory]);
-
-  const selectedRawMaterial = useMemo(() => {
-    return rawInventory.find(r => r.id === selectedRawInventoryId);
-  }, [rawInventory, selectedRawInventoryId]);
-
-  const getRawItemInvoiceNo = (r: any) => {
-    if (!r) return 'N/A';
-    const p = purchases.find(
-      (item) => item.id === r.purchaseId || item.billNumber === r.purchaseId || item.invoiceNumber === r.purchaseId
-    );
-    return (
-      p?.billNumber ||
-      r.billNumber ||
-      p?.invoiceNumber ||
-      (r.invoiceNumber && !r.invoiceNumber.startsWith('DF-2026-') ? r.invoiceNumber : '') ||
-      (r.batchId && !r.batchId.startsWith('DF-2026-') ? r.batchId : 'N/A')
-    );
-  };
 
   const getOrderInvoiceNo = (po: ProductionOrder) => {
     const raw = rawInventory.find((r) => r.id === po.rawInventoryId);
@@ -118,85 +96,20 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
     return `PRD-2026-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
-  const openCreateModal = () => {
-    setOrderCode(getNextOrderCode());
-    setChallanNumber(getNextChallanNumber());
-    setStyleName('');
-    setQuantity(0);
-    const cuttingContractor = contractors.find(c => c.specialty?.toLowerCase().includes('cut')) || contractors[0];
-    setContractorName(cuttingContractor?.name || 'Cutting Department Unit 1');
-    setStartDate(new Date().toISOString().substring(0, 10));
-    setEstimatedCompletion('');
-    setSelectedRawInventoryId('');
-    setMetersRequired(0);
-    setIsCreateModalOpen(true);
+  const getStageContractorName = (po: ProductionOrder, stageName: string) => {
+    if (stageName === 'Cutting') return po.cuttingContractor || po.stageContractors?.cutting || (po.stageHistory || []).find(s => s.stageName === 'Cutting')?.contractorName || (po.currentStage === 'Cutting' ? (po.contractorName || po.assignedTo) : '') || '-';
+    if (stageName === 'Stitching') return po.stitchingContractor || po.stageContractors?.stitching || (po.stageHistory || []).find(s => s.stageName === 'Stitching')?.contractorName || (po.currentStage === 'Stitching' ? (po.contractorName || po.assignedTo) : '') || '-';
+    if (stageName === 'Washing') return po.washingContractor || po.stageContractors?.washing || (po.stageHistory || []).find(s => s.stageName === 'Washing')?.contractorName || (po.currentStage === 'Washing' ? (po.contractorName || po.assignedTo) : '') || '-';
+    if (stageName === 'Packaging' || stageName === 'Packing') return po.packagingContractor || po.stageContractors?.packaging || (po.stageHistory || []).find(s => s.stageName === 'Packaging' || s.stageName === 'Packing')?.contractorName || (po.currentStage === 'Packaging' || po.currentStage === 'Packing' ? (po.contractorName || po.assignedTo) : '') || '-';
+    return '-';
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (selectedRawInventoryId && selectedRawMaterial) {
-      if (metersRequired > selectedRawMaterial.availableMeters) {
-        alert(`Cannot allocate ${metersRequired}m — only ${selectedRawMaterial.availableMeters}m available in raw inventory.`);
-        return;
-      }
-    }
-
-    const initialCuttingStage: StageHistoryEntry = {
-      stageName: 'Cutting',
-      contractorId: '',
-      contractorName: contractorName || 'Cutting Unit',
-      quantitySent: quantity,
-      quantityReceived: 0,
-      quantityCompleted: 0,
-      rejectedQuantity: 0,
-      wastageQuantity: 0,
-      assignedDate: startDate || new Date().toISOString().substring(0, 10),
-      completedDate: '',
-      status: 'In Progress',
-      remarks: 'Initial production order created and sent to Cutting Contractor'
-    };
-
-    addProductionOrder({
-      poCode: orderCode,
-      orderCode,
-      challanNumber: challanNumber || getNextChallanNumber(),
-      styleName,
-      name: styleName,
-      productName: styleName,
-      plannedQuantity: quantity,
-      quantity,
-      total: quantity,
-      completed: 0,
-      completedQuantity: 0,
-      defectiveQuantity: 0,
-      totalRejectedQuantity: 0,
-      currentStage: 'Cutting',
-      stage: 'Cutting',
-      progress: 15,
-      assignedTo: contractorName,
-      contractorName,
-      startDate,
-      estimatedCompletion,
-      dueDate: estimatedCompletion || startDate,
-      status: 'In Progress',
-      overallStatus: 'In Progress',
-      createdAt: new Date().toISOString(),
-      stageHistory: [initialCuttingStage],
-      // Pipeline linkage
-      rawInventoryId: selectedRawInventoryId || undefined,
-      rawBatchId: selectedRawMaterial ? getRawItemInvoiceNo(selectedRawMaterial) : undefined,
-      fabricName: selectedRawMaterial?.fabricName || undefined,
-      metersRequired: metersRequired || undefined,
-      metersAllocated: metersRequired || undefined,
-      producedItemName: styleName,
-      inventoryTransferred: false
-    } as any);
-
-    setIsCreateModalOpen(false);
+  const getContractorDetails = (name: string) => {
+    if (!name || name === '-') return null;
+    return contractors.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase()) || null;
   };
 
-  // Search and filter logic (latest first)
+  // Search and filter logic (pending production orders shown above finished ones, latest first)
   const filteredOrders = useMemo(() => {
     const list = orders.filter(order => {
       const code = order.poCode || order.orderCode || '';
@@ -213,9 +126,25 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
         stage.toLowerCase().includes(searchQuery.toLowerCase());
 
       if (filterStage === 'All') return matchesSearch;
+      if (filterStage === 'Packaging') {
+        return matchesSearch && (order.currentStage === 'Packaging' || order.stage === 'Packaging' || order.currentStage === 'Packing' || order.stage === 'Packing');
+      }
       return matchesSearch && (order.currentStage === filterStage || order.stage === filterStage);
     });
-    return sortLatest(list);
+
+    return [...list].sort((a, b) => {
+      const isFinishedA = a.currentStage === 'Finished Goods' || a.stage === 'Finished Goods' || a.status === 'Completed' || a.overallStatus === 'Completed' || (Number(a.progress) >= 100);
+      const isFinishedB = b.currentStage === 'Finished Goods' || b.stage === 'Finished Goods' || b.status === 'Completed' || b.overallStatus === 'Completed' || (Number(b.progress) >= 100);
+
+      // Pending (in-progress) orders come above finished ones
+      if (!isFinishedA && isFinishedB) return -1;
+      if (isFinishedA && !isFinishedB) return 1;
+
+      // Within the same group, sort latest first
+      const timeA = new Date(a.createdAt || a.startDate || 0).getTime();
+      const timeB = new Date(b.createdAt || b.startDate || 0).getTime();
+      return timeB - timeA;
+    });
   }, [orders, searchQuery, filterStage]);
 
   const getStageIcon = (stage: string) => {
@@ -223,6 +152,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       case 'Cutting': return <Scissors className="w-3.5 h-3.5" />;
       case 'Stitching': return <Factory className="w-3.5 h-3.5" />;
       case 'Washing': return <Sparkles className="w-3.5 h-3.5" />;
+      case 'Packaging':
       case 'Packing': return <Box className="w-3.5 h-3.5" />;
       case 'Finished Goods': return <PackageCheck className="w-3.5 h-3.5" />;
       default: return <Layers className="w-3.5 h-3.5" />;
@@ -237,6 +167,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
         return 'bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800';
       case 'Washing':
         return 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-400 border border-purple-300 dark:border-purple-800';
+      case 'Packaging':
       case 'Packing':
         return 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-800';
       case 'Finished Goods':
@@ -254,25 +185,40 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       transition={{ duration: 0.3 }}
       className="pb-24 select-none"
     >
-      {/* Tab Header */}
-      <section className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-hanken text-3xl font-black text-gray-900 dark:text-neutral-100 tracking-tight">
-            Production Floor Tracking
-          </h1>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5 font-medium font-geist">
-            Challan tracking pipeline: Cutting &rarr; Stitching &rarr; Washing &rarr; Packing &rarr; Finished Goods
-          </p>
-        </div>
+      <AnimatePresence mode="wait">
+        {view === 'create' ? (
+          <CreateProductionScreen
+            key="create-production-screen"
+            onBack={() => setView('list')}
+            onCreated={() => setView('list')}
+          />
+        ) : (
+          <motion.div
+            key="production-list-view"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* Tab Header */}
+            <section className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h1 className="font-hanken text-3xl font-black text-gray-900 dark:text-neutral-100 tracking-tight">
+                  Production Floor Tracking
+                </h1>
+                <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5 font-medium font-geist">
+                  Challan tracking pipeline: Cutting &rarr; Stitching &rarr; Washing &rarr; Packing &rarr; Finished Goods
+                </p>
+              </div>
 
-        <button
-          onClick={openCreateModal}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Production Order</span>
-        </button>
-      </section>
+              <button
+                onClick={() => setView('create')}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Production Order</span>
+              </button>
+            </section>
 
       {/* Search & Filters */}
       <section className="mb-4 flex gap-2">
@@ -282,7 +228,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-11 pl-10 pr-4 bg-white dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none text-xs text-gray-900 dark:text-neutral-100 placeholder:text-gray-400 font-mono"
-            placeholder="Search Challan #, Order code, style, or contractor..."
+            placeholder="Search Challan #, garment style, or contractor..."
             type="text"
           />
         </div>
@@ -297,7 +243,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
             <option value="Cutting">Cutting</option>
             <option value="Stitching">Stitching</option>
             <option value="Washing">Washing</option>
-            <option value="Packing">Packing</option>
+            <option value="Packaging">Packaging</option>
             <option value="Finished Goods">Finished Goods</option>
           </select>
           <SlidersHorizontal className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -314,7 +260,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
               Start a new production run with a persistent Challan Number from Cutting to Finished Goods.
             </p>
             <button
-              onClick={openCreateModal}
+              onClick={() => setView('create')}
               className="mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold rounded-xl inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -360,7 +306,7 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                 {/* Progress Bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs text-gray-500 dark:text-neutral-400">
-                    <span>Assigned: <strong className="text-gray-900 dark:text-neutral-100">{order.contractorName || order.assignedTo}</strong></span>
+                    <span>Assigned: <strong className={isFinished ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-gray-900 dark:text-neutral-100"}>{isFinished ? 'Finished' : (order.contractorName || order.assignedTo)}</strong></span>
                     <span className="font-bold text-gray-900 dark:text-neutral-100">{progress}% Progress ({completedQty}/{totalQty} pcs)</span>
                   </div>
                   <div className="h-1.5 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
@@ -369,14 +315,33 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                       style={{ width: `${progress}%` }}
                     />
                   </div>
+                  {/* Stage contractor badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${order.currentStage === 'Cutting' ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-400'}`}>
+                      Cut: {getStageContractorName(order, 'Cutting')}
+                    </span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${order.currentStage === 'Stitching' ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-400'}`}>
+                      Stt: {getStageContractorName(order, 'Stitching')}
+                    </span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${order.currentStage === 'Washing' ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-400'}`}>
+                      Wash: {getStageContractorName(order, 'Washing')}
+                    </span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${order.currentStage === 'Packaging' ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-bold border border-amber-300' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-400'}`}>
+                      Pack: {getStageContractorName(order, 'Packaging')}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Footer Info & Quick Actions */}
                 <div className="flex justify-between items-center text-[11px] text-gray-400 dark:text-neutral-500 pt-2 border-t border-gray-100 dark:border-neutral-800 flex-wrap gap-2">
                   <div className="flex items-center gap-3">
-                    <span>Order: {order.orderCode || order.poCode}</span>
                     {order.metersAllocated && (
-                      <span className="text-emerald-600 dark:text-emerald-400">{order.metersAllocated}m Fabric</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">{order.metersAllocated}m Fabric</span>
+                    )}
+                    {(order.dueDate || order.estimatedCompletionDate) && (
+                      <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                        <Calendar className="w-3 h-3" /> Due: {order.dueDate || order.estimatedCompletionDate}
+                      </span>
                     )}
                   </div>
 
@@ -418,12 +383,12 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
       {/* Order Details Drawer / Inspection Modal */}
       <AnimatePresence>
         {selectedOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-mono">
+          <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-mono">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl relative max-h-[85vh] overflow-y-auto"
+              className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl relative max-h-[85vh] overflow-y-auto no-scrollbar"
             >
               <button
                 onClick={() => setSelectedOrder(null)}
@@ -461,6 +426,67 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                   </div>
                 )}
 
+                {/* 4-Stage Contractor Directory */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                      Stage Contractors &amp; Contacts
+                    </span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      Active: {selectedOrder.currentStage || selectedOrder.stage}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { stage: 'Cutting', name: getStageContractorName(selectedOrder, 'Cutting'), icon: Scissors },
+                      { stage: 'Stitching', name: getStageContractorName(selectedOrder, 'Stitching'), icon: Factory },
+                      { stage: 'Washing', name: getStageContractorName(selectedOrder, 'Washing'), icon: Sparkles },
+                      { stage: 'Packaging', name: getStageContractorName(selectedOrder, 'Packaging'), icon: Box },
+                      { stage: 'Finished Goods', name: selectedOrder.warehouse || selectedOrder.godown || 'Central Godown', icon: PackageCheck }
+                    ].map(stg => {
+                      const Icon = stg.icon;
+                      const details = getContractorDetails(stg.name);
+                      const isCurrentStage = (selectedOrder.currentStage || selectedOrder.stage) === stg.stage;
+
+                      return (
+                        <div
+                          key={stg.stage}
+                          className={`p-2.5 rounded-xl border text-xs transition-all ${
+                            isCurrentStage
+                              ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs'
+                              : 'bg-gray-50/60 dark:bg-neutral-950/30 border-gray-100 dark:border-neutral-800'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
+                              <Icon className="w-3 h-3 text-emerald-600" />
+                              <span>{stg.stage}</span>
+                            </span>
+                            {isCurrentStage && (
+                              <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-bold">Active</span>
+                            )}
+                          </div>
+                          <div className="font-bold text-gray-900 dark:text-neutral-100 truncate">
+                            {stg.name && stg.name !== '-' ? stg.name : <span className="text-gray-400 italic font-normal">Not configured</span>}
+                          </div>
+                          {details?.phone && (
+                            <div className="text-[10px] text-gray-500 dark:text-neutral-400 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-2.5 h-2.5 text-gray-400" />
+                              <span>{details.phone}</span>
+                            </div>
+                          )}
+                          {details?.location && (
+                            <div className="text-[9px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
+                              <MapPin className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">{details.location}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Stage Progress */}
                 <div className="p-3 rounded-xl bg-gray-50 dark:bg-neutral-950/40 border border-gray-100 dark:border-neutral-800/40">
                   <div className="flex justify-between items-center mb-1.5">
@@ -487,6 +513,11 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
                           <div>
                             <span className="font-bold text-gray-900 dark:text-neutral-100">{s.stageName}</span>
                             <span className="text-gray-400 ml-1.5">({s.contractorName})</span>
+                            {s.dueDate && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block">
+                                Due: {s.dueDate}
+                              </span>
+                            )}
                           </div>
                           <div className="text-right">
                             <span className="font-bold text-emerald-600 dark:text-emerald-400">{s.quantityCompleted || s.quantitySent} pcs</span>
@@ -543,198 +574,15 @@ export default function ProductionTab({ orders }: ProductionTabProps) {
         }}
       />
 
-      {/* Create Production Order Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-mono">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto text-xs"
-          >
-            <div className="flex justify-between items-center border-b border-gray-100 dark:border-neutral-800 pb-3 mb-4">
-              <div>
-                <h3 className="font-hanken font-bold text-base text-gray-900 dark:text-neutral-100">
-                  New Garment Production Run
-                </h3>
-                <p className="text-[11px] text-gray-400">Generate persistent Challan &amp; assign to Cutting Contractor</p>
-              </div>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">
-                    Challan Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    readOnly
-                    value={challanNumber}
-                    className="w-full px-3 py-2 bg-emerald-50/50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 font-bold text-emerald-800 dark:text-emerald-300 rounded outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-gray-500">
-                    Order Code
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={orderCode}
-                    onChange={(e) => setOrderCode(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-[10px]">
-                  <label className="uppercase font-bold text-gray-500">
-                    Garment Style / Item Name
-                  </label>
-                  <span className="text-emerald-600 font-medium">Same name adds to product inventory</span>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={styleName}
-                  onChange={(e) => setStyleName(e.target.value)}
-                  placeholder="e.g. Slim Fit Indigo Denim Jeans"
-                  list="emp-existing-product-styles"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none font-bold"
-                />
-                <datalist id="emp-existing-product-styles">
-                  {Array.from(new Set([
-                    ...finishedInventory.map(f => f.productName || f.itemName || f.styleName).filter(Boolean),
-                    ...orders.map(p => p.productName || p.styleName || p.name).filter(Boolean)
-                  ])).map((name, idx) => (
-                    <option key={idx} value={name as string} />
-                  ))}
-                </datalist>
-              </div>
-
-              {/* Raw Material Selection */}
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <ArrowRight className="w-3 h-3" />
-                  Select Raw Fabric from Inventory
-                </label>
-                <select
-                  value={selectedRawInventoryId}
-                  onChange={(e) => setSelectedRawInventoryId(e.target.value)}
-                  className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded outline-none font-mono"
-                >
-                  <option value="">— Select raw denim roll —</option>
-                  {availableRawMaterials.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.fabricName} — {r.availableMeters}m available — Bill No: {getRawItemInvoiceNo(r)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedRawMaterial && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px]">
-                    <label className="uppercase font-bold text-gray-500">Fabric Meters to Allocate</label>
-                    <span className="text-emerald-600 font-bold">Max: {selectedRawMaterial.availableMeters}m</span>
-                  </div>
-                  <input
-                    type="number"
-                    min={1}
-                    max={selectedRawMaterial.availableMeters}
-                    required
-                    value={metersRequired}
-                    onChange={(e) => setMetersRequired(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none font-bold"
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-gray-500">
-                    Target Planned Qty (Pcs)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-gray-500">
-                    1. Cutting Contractor
-                  </label>
-                  <select
-                    value={contractorName}
-                    onChange={(e) => setContractorName(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none font-bold"
-                    required
-                  >
-                    <option value="">-- Select Contractor --</option>
-                    {contractors.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name} {c.specialty ? `(${c.specialty})` : ''}
-                      </option>
-                    ))}
-                    <option value="In-House Cutting Unit">In-House Cutting Unit</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-500">
-                  Target Completion Date
-                </label>
-                <input
-                  type="date"
-                  value={estimatedCompletion}
-                  onChange={(e) => setEstimatedCompletion(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-neutral-800">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Order &amp; Issue Challan</span>
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
       {/* Production Challan / Receipt Printable Modal */}
       <ProductionChallanModal
         isOpen={!!challanModalOrder}
         onClose={() => setChallanModalOrder(null)}
         order={challanModalOrder}
       />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -18,14 +18,18 @@ export interface AppUser {
 
 export type ProductionStage =
   | 'Cutting'
-  | 'Dyeing'
-  | 'Printing'
   | 'Stitching'
-  | 'Quality Inspection'
-  | 'Ironing & Finishing'
+  | 'Washing'
   | 'Packaging'
-  | 'Completed'
   | 'Finished Goods'
+  | 'Completed'
+  | string;
+
+export type ContractorSpecialty =
+  | 'Cutting'
+  | 'Stitching'
+  | 'Washing'
+  | 'Packaging'
   | string;
 
 export interface StageHistoryEntry {
@@ -33,10 +37,13 @@ export interface StageHistoryEntry {
   stageName?: string;
   timestamp?: string;
   assignedDate?: string;
+  dueDate?: string;
   completedDate?: string;
   assignedWorker?: string;
   contractorId?: string;
   contractorName?: string;
+  contractorPhone?: string;
+  contractorLocation?: string;
   quantitySent?: number;
   quantityReceived?: number;
   quantityCompleted?: number;
@@ -77,9 +84,22 @@ export interface ProductionOrder {
   assignedContractorId?: string;
   contractorName?: string;
   assignedTo?: string;
+  cuttingContractor?: string;
+  stitchingContractor?: string;
+  washingContractor?: string;
+  packagingContractor?: string;
+  stageContractors?: {
+    cutting?: string;
+    stitching?: string;
+    washing?: string;
+    packaging?: string;
+    [key: string]: string | undefined;
+  };
   startDate?: string;
   estimatedCompletionDate?: string;
   estimatedCompletion?: string;
+  completionDate?: string;
+  completedDate?: string;
   dueDate?: string;
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   status?: 'Draft' | 'Active' | 'Paused' | 'Completed' | 'Cancelled' | 'In Progress' | string;
@@ -95,6 +115,9 @@ export interface ProductionOrder {
   producedItemName?: string;
   finishedInventoryCreated?: boolean;
   warehouse?: string;
+  godown?: string;
+  unitPrice?: number;
+  pricePerPiece?: number;
   createdAt?: string;
   createdBy?: string;
 }
@@ -110,7 +133,6 @@ export interface StockItem {
   availableUnits: number;
   location: string;
   warehouse?: string;
-  rackLocation?: string;
   status: StockStatus;
   imageUrl?: string;
   unitPrice?: number;
@@ -159,7 +181,6 @@ export interface FinishedInventoryItem {
   unitsSold?: number;
   soldQuantity?: number;
   warehouse?: string;
-  rackLocation?: string;
   costPerUnit?: number;
   unitPrice?: number;
   sellingPrice?: number;
@@ -187,12 +208,12 @@ export interface Contractor {
   id: string;
   code: string;
   name: string;
-  specialty: 'Stitching' | 'Dyeing' | 'Fabric Cutting' | 'Quality Control' | 'Packaging' | 'Finishing';
+  specialty: ContractorSpecialty;
   contactPerson: string;
   phone: string;
-  email: string;
+  email?: string;
   location: string;
-  rating: number;
+  rating?: number;
   activeOrdersCount: number;
   status: 'Active' | 'Inactive';
   createdAt?: string;
@@ -205,7 +226,6 @@ export interface Supplier {
   name: string;
   contactPerson?: string;
   phone: string;
-  email?: string;
   address?: string;
   gstin?: string;
   accountNumber?: string;
@@ -223,11 +243,11 @@ export interface Customer {
   type?: string;
   contactPerson: string;
   phone: string;
-  email: string;
+  email?: string;
   address: string;
   gstin?: string;
   category: 'Wholesaler' | 'Retailer' | 'Distributor' | 'Boutique' | 'Online Channel' | string;
-  creditLimit: number;
+  creditLimit?: number;
   outstandingBalance: number;
   paymentTerms: string;
   status: 'Active' | 'Inactive' | 'Blocked';
@@ -313,6 +333,7 @@ export interface Invoice {
   itemsSummary?: string;
   customerId?: string;
   customerName?: string;
+  customerPhone?: string;
   customerGstin?: string;
   customerAddress?: string;
   date?: string;
@@ -351,20 +372,25 @@ export interface SaleOrder {
   saleCode?: string;
   customerId: string;
   customerName: string;
-  orderDate: string;
+  customerPhone?: string;
+  orderDate?: string;
+  saleDate?: string;
   dispatchDate?: string;
   status: SaleOrderStatus;
-  paymentStatus: 'Paid' | 'Partial' | 'Unpaid';
+  paymentStatus?: 'Paid' | 'Partial' | 'Pending' | 'Unpaid';
+  paymentMethod?: string;
+  paymentMode?: string;
   lineItems?: SaleLineItem[];
-  items?: any[];
-  subtotal: number;
-  gstRate: number;
-  gstAmount: number;
-  grandTotal: number;
-  totalAmount?: number;
-  paidAmount: number;
-  shippingAddress: string;
+  items: any[];
+  subtotal?: number;
+  gstRate?: number;
+  gstAmount?: number;
+  grandTotal?: number;
+  totalAmount: number;
+  paidAmount?: number;
+  shippingAddress?: string;
   invoiceId?: string;
+  invoiceNumber?: string;
   notes?: string;
   createdAt: string;
 }

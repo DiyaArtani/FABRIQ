@@ -24,18 +24,23 @@ import { UnifiedLoginPage } from './pages/UnifiedLoginPage';
 import { EmployeeLoginPage } from './employee/pages/EmployeeLoginPage';
 import { EmployeeApp } from './employee/EmployeeApp';
 import { ProtectedEmployeeRoute } from './employee/routes/ProtectedEmployeeRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   return (
-    <FabriqDataProvider>
-      <AdminAuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<UnifiedLoginPage />} />
-            <Route path="/login" element={<UnifiedLoginPage />} />
-            <Route path="/auth" element={<UnifiedLoginPage />} />
-            <Route path="/admin/login" element={<UnifiedLoginPage />} />
-            <Route path="/app/login" element={<UnifiedLoginPage />} />
+    <ErrorBoundary fallbackTitle="Fabriq ERP Error">
+      <FabriqDataProvider>
+        <AdminAuthProvider>
+          <BrowserRouter>
+            <Routes>
+            {/* Default App Entry - Employee Login Only */}
+            <Route path="/" element={<EmployeeLoginPage />} />
+            <Route path="/login" element={<EmployeeLoginPage />} />
+            <Route path="/auth" element={<EmployeeLoginPage />} />
+            <Route path="/app/login" element={<EmployeeLoginPage />} />
+
+            {/* Admin Login Route - typed as /admin or /admin/login in URL */}
+            <Route path="/admin/login" element={<AdminLoginPage />} />
 
             {/* Admin Portal Protected Routes */}
             <Route path="/admin" element={<ProtectedAdminRoute />}>
@@ -68,5 +73,6 @@ export default function App() {
         </BrowserRouter>
       </AdminAuthProvider>
     </FabriqDataProvider>
+  </ErrorBoundary>
   );
 }

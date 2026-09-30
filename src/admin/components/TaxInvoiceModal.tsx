@@ -1,17 +1,18 @@
-import React, { useRef, useState } from 'react';
-import { Printer, Download, X, FileText, CheckCircle2, Copy, Building2, Phone, Mail, MapPin } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, X, FileText, CheckCircle2, Copy } from 'lucide-react';
 import { Invoice, Customer } from '../../types';
 import { useFabriqData } from '../../context/FabriqDataContext';
-import { numberToIndianWords, calculateGSTBreakdown } from '../../lib/invoiceUtils';
+import { numberToIndianWords } from '../../lib/invoiceUtils';
+import { WhatsAppShareModal, WhatsAppIcon } from '../../components/WhatsAppShareModal';
 
-interface TaxInvoiceModalProps {
+export interface PrintableInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoice: Invoice | null;
   customer?: Customer | null;
 }
 
-export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
+export const PrintableInvoiceModal: React.FC<PrintableInvoiceModalProps> = ({
   isOpen,
   onClose,
   invoice,
@@ -19,7 +20,8 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
 }) => {
   const { settings, customers } = useFabriqData();
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [invoiceCopyType, setInvoiceCopyType] = useState<'Original' | 'Duplicate' | 'Triplicate'>('Original');
+  const [invoiceCopyType, setInvoiceCopyType] = useState<'Original' | 'Duplicate' | 'Office'>('Original');
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   if (!isOpen || !invoice) return null;
 
@@ -30,7 +32,6 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
     email: 'client@apparel-orders.in',
     phone: '+91 98250 12345',
     address: 'Ring Road Textile Market, Surat, Gujarat - 395002',
-    gstin: '24AAACF1234F1Z5',
     type: 'Wholesale' as const
   };
 
@@ -46,15 +47,16 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
         }
       ];
 
-  const taxDetails = calculateGSTBreakdown(invoice.amount, false, settings.defaultTaxRate || 5);
-  const amountInWords = numberToIndianWords(invoice.amount);
+  const totalQuantity = lineItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+  const grandTotalAmount = invoice.amount;
+  const amountInWords = numberToIndianWords(grandTotalAmount);
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleCopySummary = () => {
-    const summary = `Tax Invoice #${invoice.invoiceNumber || invoice.invoiceCode}\nClient: ${resolvedCustomer.name}\nAmount: ₹${invoice.amount.toLocaleString('en-IN')}\nStatus: ${invoice.status}\nDate: ${invoice.date}`;
+    const summary = `Invoice #${invoice.invoiceNumber || invoice.invoiceCode}\nClient: ${resolvedCustomer.name}\nAmount: ₹${invoice.amount.toLocaleString('en-IN')}\nStatus: ${invoice.status}\nDate: ${invoice.date}`;
     navigator.clipboard.writeText(summary);
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
@@ -72,7 +74,7 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
             </div>
             <div>
               <h2 className="font-hanken font-extrabold text-sm sm:text-base text-zinc-900 dark:text-zinc-100">
-                GST Tax Invoice &amp; Payment Receipt
+                Printable Invoice
               </h2>
               <span className="text-[10px] text-zinc-500 font-mono">
                 Invoice No: {invoice.invoiceNumber || invoice.invoiceCode}
@@ -83,7 +85,7 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
           <div className="flex items-center gap-2">
             {/* Copy Type Selector */}
             <div className="hidden sm:flex bg-zinc-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-bold">
-              {(['Original', 'Duplicate', 'Triplicate'] as const).map(type => (
+              {(['Original', 'Duplicate', 'Office'] as const).map(type => (
                 <button
                   key={type}
                   onClick={() => setInvoiceCopyType(type)}
@@ -109,10 +111,19 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
 
             <button
               onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Invoice</span>
+              <span className="hidden sm:inline">Print Invoice</span>
+            </button>
+
+            <button
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-all hover:scale-102 active:scale-98 cursor-pointer"
+              title="Send invoice directly to customer on WhatsApp"
+            >
+              <WhatsAppIcon className="w-4 h-4" />
+              <span>WhatsApp</span>
             </button>
 
             <button
@@ -142,15 +153,14 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
                 Plot 42, Millenium Textile Park, Ring Road, Surat, Gujarat - 395002
               </p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-mono mt-1">
-                <span><strong>GSTIN:</strong> {settings.gstin || '24AAACF9876E1Z2'}</span>
-                <span><strong>PAN:</strong> AAACF9876E</span>
-                <span><strong>STATE CODE:</strong> 24 (Gujarat)</span>
+                <span><strong>Phone:</strong> {settings.contactPhone || '+91 98250 12345'}</span>
+                <span><strong>Email:</strong> {settings.companyEmail || 'info@fabriq-erp.in'}</span>
               </div>
             </div>
 
             <div className="text-right sm:text-right w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-200">
               <span className="inline-block px-2.5 py-0.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-[10px] font-black uppercase tracking-widest rounded mb-1">
-                TAX INVOICE ({invoiceCopyType.toUpperCase()} FOR RECIPIENT)
+                INVOICE ({invoiceCopyType.toUpperCase()} COPY)
               </span>
               <div className="font-hanken font-black text-xl text-emerald-600 dark:text-emerald-400 tracking-tight">
                 {invoice.invoiceNumber || invoice.invoiceCode}
@@ -178,18 +188,13 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
               <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
                 <div><strong>Contact Person:</strong> {resolvedCustomer.contactPerson}</div>
                 <div><strong>Phone:</strong> {resolvedCustomer.phone}</div>
-                <div><strong>Email:</strong> {resolvedCustomer.email}</div>
-                {resolvedCustomer.gstin && (
-                  <div className="text-emerald-600 dark:text-emerald-400 font-bold">
-                    <strong>GSTIN:</strong> {resolvedCustomer.gstin}
-                  </div>
-                )}
+                {resolvedCustomer.email && <div><strong>Email:</strong> {resolvedCustomer.email}</div>}
               </div>
             </div>
 
             <div className="space-y-1 border-t sm:border-t-0 sm:border-l sm:pl-4 border-zinc-200 dark:border-zinc-800 pt-3 sm:pt-0">
               <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
-                Shipping &amp; Dispatch Destination
+                Shipping &amp; Delivery Details
               </span>
               <h4 className="font-hanken font-semibold text-xs text-zinc-800 dark:text-zinc-200">
                 Consignee: {resolvedCustomer.name}
@@ -198,8 +203,6 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
                 Delivery Location: {resolvedCustomer.address}
               </p>
               <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
-                <div><strong>Place of Supply:</strong> Gujarat (State Code: 24)</div>
-                <div><strong>Reverse Charge Applicable:</strong> No</div>
                 <div><strong>Payment Mode:</strong> {invoice.paymentMode || 'NEFT / RTGS / Bank Transfer'}</div>
                 {invoice.saleId && (
                   <div><strong>Sale Order Ref:</strong> {invoice.saleId}</div>
@@ -215,7 +218,6 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
                 <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 uppercase">
                   <th className="p-3 w-10 text-center">#</th>
                   <th className="p-3">Item Description &amp; Specifications</th>
-                  <th className="p-3 text-center">HSN/SAC</th>
                   <th className="p-3 text-right">Qty</th>
                   <th className="p-3 text-right">Unit Rate</th>
                   <th className="p-3 text-right">Total Amount</th>
@@ -233,7 +235,6 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
                         Garment Finished Stock • Premium Export Quality
                       </span>
                     </td>
-                    <td className="p-3 text-center font-mono text-zinc-500">62034200</td>
                     <td className="p-3 text-right font-bold text-zinc-900 dark:text-zinc-100">
                       {item.quantity} Pcs
                     </td>
@@ -249,13 +250,13 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
             </table>
           </div>
 
-          {/* Calculations, Tax Summary & Words */}
+          {/* Calculations, Summary & Words */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
             {/* Left Box: Amount in Words & Bank Details */}
             <div className="space-y-4">
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1">
                 <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
-                  Invoice Value in Words:
+                  Invoice Amount in Words:
                 </span>
                 <p className="font-bold text-xs text-zinc-800 dark:text-zinc-200 italic font-sans leading-relaxed">
                   {amountInWords}
@@ -275,31 +276,28 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
               </div>
             </div>
 
-            {/* Right Box: Tax Breakdown & Grand Total */}
+            {/* Right Box: Total Summary */}
             <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2.5 font-mono text-xs">
               <div className="flex justify-between items-center text-zinc-600 dark:text-zinc-400">
-                <span>Taxable Value of Goods:</span>
+                <span>Total Quantity:</span>
                 <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                  ₹{taxDetails.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  {totalQuantity} Pcs
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-zinc-600 dark:text-zinc-400">
-                <span>CGST ({taxDetails.cgstRate}%):</span>
-                <span>₹{taxDetails.cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-
-              <div className="flex justify-between items-center text-zinc-600 dark:text-zinc-400">
-                <span>SGST ({taxDetails.sgstRate}%):</span>
-                <span>₹{taxDetails.sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span>Subtotal:</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                  ₹{grandTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
               </div>
 
               <div className="border-t border-dashed border-zinc-300 dark:border-zinc-700 pt-2 flex justify-between items-baseline">
                 <span className="font-extrabold text-sm text-zinc-900 dark:text-zinc-100 font-hanken">
-                  Total Invoice Amount (INR):
+                  Total Payable Amount:
                 </span>
                 <span className="font-black text-xl text-emerald-600 dark:text-emerald-400">
-                  ₹{invoice.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{grandTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -329,8 +327,40 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
             </div>
           </div>
 
+          {/* Quick WhatsApp Share Action Bar inside Invoice view (Hidden during Print) */}
+          <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-50/60 dark:bg-emerald-950/30 p-3.5 rounded-xl border-dashed border-emerald-300 dark:border-emerald-800 print:hidden">
+            <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+              <div className="w-7 h-7 rounded-lg bg-[#25D366] text-white flex items-center justify-center">
+                <WhatsAppIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-xs block text-zinc-900 dark:text-zinc-100">Send Invoice directly to {resolvedCustomer.name}</span>
+                <span className="text-[10px] text-zinc-500 font-mono">Linked Number: {resolvedCustomer.phone || 'No phone registered'}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-hanken font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5" />
+              <span>Share on WhatsApp</span>
+            </button>
+          </div>
+
         </div>
       </div>
+
+      {/* WhatsApp Share Modal Dialog */}
+      <WhatsAppShareModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        invoice={invoice}
+        customer={resolvedCustomer}
+      />
     </div>
   );
 };
+
+// Backwards-compatibility alias so existing imports continue to work seamlessly
+export const TaxInvoiceModal = PrintableInvoiceModal;
+export default PrintableInvoiceModal;

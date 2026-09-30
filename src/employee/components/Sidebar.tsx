@@ -5,12 +5,7 @@ import {
   Package, 
   Receipt, 
   ShoppingBag, 
-  Settings, 
-  Sun, 
-  Moon,
-  TrendingUp,
-  Boxes,
-  AlertTriangle
+  Settings 
 } from 'lucide-react';
 import { ProductionOrder, StockItem, Invoice } from '../../types';
 
@@ -20,8 +15,8 @@ interface SidebarProps {
   productionOrders: ProductionOrder[];
   stockItems: StockItem[];
   invoices: Invoice[];
-  isDarkMode: boolean;
-  onToggleTheme: () => void;
+  isDarkMode?: boolean;
+  onToggleTheme?: () => void;
   userEmail?: string;
 }
 
@@ -30,10 +25,7 @@ export default function Sidebar({
   onChangeTab,
   productionOrders,
   stockItems,
-  invoices,
-  isDarkMode,
-  onToggleTheme,
-  userEmail = 'diyaartani003@gmail.com'
+  invoices
 }: SidebarProps) {
   const tabs = [
     { id: 'home', label: 'Dashboard', icon: Home },
@@ -43,9 +35,6 @@ export default function Sidebar({
     { id: 'sales', label: 'Sales & Billing', icon: Receipt, badge: invoices.filter(i => i.status === 'Pending').length, badgeType: 'danger' },
     { id: 'more', label: 'System Settings', icon: Settings }
   ];
-
-  // ERP stats overview
-  const totalValuation = stockItems.reduce((acc, item) => acc + (item.availableUnits * (item.unitPrice || item.costPrice || 0)), 0);
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 md:left-0 z-40 bg-white dark:bg-neutral-950 border-r border-gray-100 dark:border-neutral-900 select-none transition-all duration-300">
@@ -105,69 +94,9 @@ export default function Sidebar({
           );
         })}
 
-        {/* ERP Live Utility Stats Panel */}
-        <div className="mt-8 pt-6 border-t border-gray-100 dark:border-neutral-900/60">
-          <div className="text-[10px] font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-wider px-3 mb-3">
-            Active System Status
-          </div>
-          
-          <div className="bg-gray-50/50 dark:bg-neutral-900/30 rounded-xl p-3 border border-gray-100 dark:border-neutral-900/40 space-y-3 mx-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500 dark:text-neutral-400 flex items-center gap-1.5">
-                <Boxes className="w-3.5 h-3.5 text-emerald-500" /> Stock Valuation:
-              </span>
-              <span className="font-semibold text-gray-800 dark:text-zinc-200">₹{totalValuation.toLocaleString('en-IN')}</span>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500 dark:text-neutral-400 flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5 text-blue-500" /> Active Orders:
-              </span>
-              <span className="font-semibold text-gray-800 dark:text-zinc-200">
-                {productionOrders.filter(o => o.progress < 100).length} Runs
-              </span>
-            </div>
-
-            {stockItems.some(s => s.status === 'Low Stock' || s.status === 'Out of Stock') && (
-              <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded-lg">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>Restock raw materials needed.</span>
-              </div>
-            )}
-          </div>
-        </div>
       </nav>
 
-      {/* User Info / Theme switch at Bottom */}
-      <div className="p-4 border-t border-gray-100 dark:border-neutral-900 bg-gray-50/30 dark:bg-neutral-900/10">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-xl border border-emerald-500/30 bg-emerald-500/10 shrink-0 flex items-center justify-center font-bold text-xs text-emerald-600 dark:text-emerald-400">
-              {(userEmail || 'A').charAt(0).toUpperCase()}
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-semibold text-gray-800 dark:text-zinc-100 truncate">
-                Admin User
-              </span>
-              <span className="text-[10px] text-gray-400 dark:text-neutral-500 truncate font-mono">
-                {userEmail}
-              </span>
-            </div>
-          </div>
 
-          <button
-            onClick={onToggleTheme}
-            aria-label="Toggle Theme"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-          >
-            {isDarkMode ? (
-              <Sun className="w-4.5 h-4.5 text-amber-400" />
-            ) : (
-              <Moon className="w-4.5 h-4.5 text-indigo-600" />
-            )}
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

@@ -1,252 +1,260 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Smartphone, ShieldCheck, ArrowRight, CheckCircle2, Delete } from 'lucide-react';
-import { useFabriqData } from '../../context/FabriqDataContext';
+import {
+  UserCheck,
+  User,
+  Mail,
+  KeyRound,
+  ArrowRight,
+  AlertCircle,
+  Sun,
+  Moon
+} from 'lucide-react';
 import { useAdminAuth } from '../../admin/context/AdminAuthContext';
+import { useFabriqData } from '../../context/FabriqDataContext';
 import { AppUser } from '../../types';
 
+
 export const EmployeeLoginPage: React.FC = () => {
-  const { users } = useFabriqData();
-  const { loginAsEmployee, loginAsEmployeeWithCredentials } = useAdminAuth();
+  const { loginAsEmployee, loginAsEmployeeWithCredentials, isFirebaseConfigured } = useAdminAuth();
+  const { settings, users } = useFabriqData();
   const navigate = useNavigate();
 
-  // Filter out any admin accounts from employee side
-  const staffList = users || [];
-  const nonAdminStaff = staffList.filter(
-    u => u.role !== 'Admin' && u.status === 'Active'
-  );
+  // Dark/Light Theme state
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('fabriq_theme');
+    if (saved) return saved === 'dark';
+    return false; // Default Light Mode
+  });
 
-  const [selectedUser, setSelectedUser] = useState<AppUser | null>(
-    nonAdminStaff.length > 0 ? nonAdminStaff[0] : null
-  );
-  const [pin, setPin] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // Keep selectedUser in sync if users load from firestore
   useEffect(() => {
-    if (!selectedUser && nonAdminStaff.length > 0) {
-      setSelectedUser(nonAdminStaff[0]);
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      localStorage.setItem('fabriq_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+      localStorage.setItem('fabriq_theme', 'light');
     }
-  }, [nonAdminStaff, selectedUser]);
+  }, [isDarkMode]);
 
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const handleKeyPress = (num: string) => {
-    if (pin.length < 6) {
-      setPin(prev => prev + num);
-      setErrorMsg('');
-    }
+  const toggleTheme = () => {
+    setIsDarkMode(prev => !prev);
   };
 
-  const handleBackspace = () => {
-    setPin(prev => prev.slice(0, -1));
-    setErrorMsg('');
+  // Filter strictly non-admin active employee profiles from Firebase database
+  const employeeUsers = useMemo(() => {
+    return (users || []).filter(u => {
+      const role = (u?.role || '').toLowerCase();
+      return role !== 'admin' && u.status !== 'Disabled';
+    });
+  }, [users]);
+
+  // Form State
+  const [employeeEmail, setEmployeeEmail] = useState('');
+  const [employeePin, setEmployeePin] = useState('');
+  const [selectedUserObj, setSelectedUserObj] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Quick Employee Select handler
+  const handleSelectEmployeeProfile = (u: AppUser) => {
+    setSelectedUserObj(u);
+    setEmployeeEmail(u.email || u.employeeId || '');
+    setEmployeePin('');
+    setErrorMsg(null);
   };
 
-  const handleLogin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!selectedUser) {
-      setErrorMsg('Please select your staff profile from the list.');
+  // Handle Employee Form Submission
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setLoading(true);
+
+    const emailOrId = employeeEmail.trim();
+    if (!emailOrId) {
+      setErrorMsg('Please enter your Employee Email or ID.');
+      setLoading(false);
       return;
     }
-    if (!pin) {
+
+    if (!employeePin.trim()) {
       setErrorMsg('Please enter your Security PIN.');
+      setLoading(false);
       return;
     }
-
-    setIsLoggingIn(true);
-    setErrorMsg('');
 
     try {
-      const res = await loginAsEmployeeWithCredentials(selectedUser.email || selectedUser.employeeId, pin);
+      const res = await loginAsEmployeeWithCredentials(emailOrId, employeePin);
       if (res.success) {
-        localStorage.setItem('fabriq_employee_auth', JSON.stringify(selectedUser));
         navigate('/app');
       } else {
-        setErrorMsg(res.message || 'Firebase Authentication failed.');
-        setPin('');
+        setErrorMsg(res.message || 'Employee authentication failed. Check your email and PIN.');
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Authentication error.');
-      setPin('');
+      setErrorMsg(err?.message || 'Login error occurred');
     } finally {
-      setIsLoggingIn(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between p-4 sm:p-8 font-sans select-none">
-      {/* Top Header */}
-      <div className="flex items-center justify-between max-w-4xl mx-auto w-full">
+    <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col justify-between p-4 sm:p-8 font-sans antialiased relative overflow-hidden transition-colors duration-300">
+      {/* Background Ambient Glow Gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 dark:bg-emerald-600/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-sky-500/10 dark:bg-sky-600/15 rounded-full blur-[140px] pointer-events-none" />
+
+      {/* Background Subtle Grid Lines Pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.05] dark:opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(0,0,0,0.3) 1px, transparent 0)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
+
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between max-w-6xl mx-auto w-full relative z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl shadow-lg shadow-emerald-950/40 overflow-hidden flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl shadow-md overflow-hidden flex items-center justify-center flex-shrink-0">
             <img src="/logo.png" alt="Fabriq Logo" className="w-full h-full object-cover" />
           </div>
           <div>
-            <h1 className="font-hanken font-black text-sm tracking-wider uppercase text-white">
-              FABRIQ MOBILE APP
+            <h1 className="font-hanken font-extrabold text-base tracking-wide uppercase text-zinc-900 dark:text-white">
+              {settings.companyName || 'FABRIQ'}
             </h1>
-            <p className="text-[11px] font-mono text-emerald-400 font-bold">
-              Staff &amp; Mill Floor Terminal
+            <p className="text-[11px] font-mono text-sky-600 dark:text-sky-400 font-bold">
+              Employee portal
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => navigate('/login')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs font-mono font-bold border border-neutral-800 rounded-xl transition-colors cursor-pointer"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Switch Portal</span>
-        </button>
+        {/* Live Status Badge & Theme Toggle */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-2.5 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+            title="Toggle Light / Dark Mode"
+          >
+            {isDarkMode ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline">Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-zinc-700" />
+                <span className="hidden sm:inline">Dark Mode</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Main Login Card */}
-      <div className="max-w-md w-full mx-auto my-auto py-6">
-        <div className="bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-1">
-            <h2 className="font-hanken font-black text-2xl text-white tracking-tight">
-              Floor Staff Sign-In
+      {/* Main Authentication Container */}
+      <div className="my-auto max-w-md w-full mx-auto relative z-10 py-6">
+        {/* Central Auth Glassmorphism Card */}
+        <div className="bg-white/95 dark:bg-zinc-900/85 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800/90 p-6 sm:p-8 shadow-xl dark:shadow-2xl rounded-3xl space-y-6 transition-colors duration-300">
+
+          {/* Card Header & Title */}
+          <div className="text-center space-y-1.5">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-sky-50 dark:bg-sky-950/80 border border-sky-500/30 text-sky-600 dark:text-sky-400 rounded-2xl mb-1 shadow-inner">
+              <UserCheck className="w-6 h-6" />
+            </div>
+            <h2 className="font-hanken font-extrabold text-2xl sm:text-3xl text-zinc-900 dark:text-white tracking-tight">
+              Sign In to Your Workspace
             </h2>
-            <p className="text-xs font-mono text-neutral-400">
-              Select your staff account and enter your security PIN
+            <p className="text-xs font-sans text-zinc-500 dark:text-zinc-400">
+              Select your employee profile or enter credentials to sign into the app
             </p>
           </div>
 
+          {/* Error Message Alert */}
           {errorMsg && (
-            <div className="p-3 bg-rose-950/80 border border-rose-800 text-rose-300 text-xs font-mono font-bold rounded-xl text-center">
-              {errorMsg}
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/90 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-mono rounded-xl flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* Non-Admin Staff Avatar Grid */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-mono font-bold text-neutral-400 uppercase tracking-wider block">
-              Choose Staff Profile:
-            </label>
-            <div className="grid grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
-              {nonAdminStaff.map(u => {
-                const isSelected = selectedUser?.id === u.id;
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedUser(u);
-                      setPin('');
-                      setErrorMsg('');
-                    }}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-950/40 border-emerald-500/80 text-white shadow-sm'
-                        : 'bg-neutral-950/60 border-neutral-800 text-neutral-400 hover:bg-neutral-800/50'
-                    }`}
-                  >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs font-mono ${
-                      isSelected ? 'bg-emerald-500 text-white' : 'bg-neutral-800 text-neutral-300'
-                    }`}>
-                      {u.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="overflow-hidden">
-                      <p className="text-xs font-bold truncate">{u.name}</p>
-                      <p className="text-[10px] font-mono text-neutral-500 truncate">{u.role}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* EMPLOYEE LOGIN FORM */}
+          <form onSubmit={handleEmployeeSubmit} className="space-y-4">
 
-          {/* PIN Input Display */}
-          <div className="space-y-3 pt-2 border-t border-neutral-800">
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] font-mono font-bold text-neutral-400 uppercase">
-                Enter Security PIN:
-              </span>
-              <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                Default: 1234
-              </span>
-            </div>
-
-            <div className="flex justify-center gap-3 py-2">
-              {[0, 1, 2, 3].map((idx) => {
-                const isFilled = pin.length > idx;
-                return (
-                  <div
-                    key={idx}
-                    className={`w-11 h-12 rounded-xl border flex items-center justify-center text-xl font-mono font-bold transition-all ${
-                      isFilled
-                        ? 'bg-emerald-950/60 border-emerald-500 text-emerald-400'
-                        : 'bg-neutral-950 border-neutral-800 text-neutral-600'
-                    }`}
-                  >
-                    {isFilled ? '•' : ''}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Keypad */}
-            <div className="grid grid-cols-3 gap-2 pt-2">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => handleKeyPress(n)}
-                  className="py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800/80 rounded-xl font-mono font-bold text-lg text-neutral-100 active:scale-95 transition-all cursor-pointer"
+            {/* Quick Select Employee Profile */}
+            {employeeUsers.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                  Select Employee
+                </label>
+                <select
+                  value={selectedUserObj?.id || ''}
+                  onChange={(e) => {
+                    const matched = employeeUsers.find(u => u.id === e.target.value);
+                    if (matched) handleSelectEmployeeProfile(matched);
+                  }}
+                  className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-sky-500 text-zinc-900 dark:text-white font-sans text-xs rounded-xl outline-none transition-colors cursor-pointer"
                 >
-                  {n}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPin('')}
-                className="py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800/80 rounded-xl font-mono text-xs font-bold text-neutral-400 active:scale-95 transition-all cursor-pointer"
-              >
-                CLEAR
-              </button>
-              <button
-                type="button"
-                onClick={() => handleKeyPress('0')}
-                className="py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800/80 rounded-xl font-mono font-bold text-lg text-neutral-100 active:scale-95 transition-all cursor-pointer"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className="py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800/80 rounded-xl font-mono flex items-center justify-center text-neutral-400 active:scale-95 transition-all cursor-pointer"
-              >
-                <Delete className="w-5 h-5" />
-              </button>
+                  <option value="">-- Choose Employee --</option>
+                  {employeeUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email || u.employeeId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Email / ID Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                Employee Email / ID
+              </label>
+              <input
+                type="text"
+                required
+                value={employeeEmail}
+                onChange={(e) => setEmployeeEmail(e.target.value)}
+                placeholder="e.g. employee@fabriq.com"
+                className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-sky-500 text-zinc-900 dark:text-white font-sans text-xs rounded-xl outline-none transition-colors"
+              />
             </div>
 
+            {/* Passcode / PIN Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-sans font-bold uppercase text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                Passcode / Security PIN
+              </label>
+              <input
+                type="password"
+                value={employeePin}
+                onChange={(e) => setEmployeePin(e.target.value)}
+                placeholder="••••"
+                className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-sky-500 text-zinc-900 dark:text-white font-sans text-xs rounded-xl outline-none transition-colors"
+              />
+            </div>
+
+            {/* Submit Button */}
             <button
-              type="button"
-              disabled={isLoggingIn}
-              onClick={() => handleLogin()}
-              className={`w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-950 transition-all cursor-pointer flex items-center justify-center gap-2 mt-3 ${
-                isLoggingIn ? 'opacity-60 cursor-not-allowed' : ''
-              }`}
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md rounded-xl cursor-pointer"
             >
-              {isLoggingIn ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>AUTHENTICATING VIA FIREBASE...</span>
-                </>
-              ) : (
-                <>
-                  <span>Authenticate &amp; Open Floor App</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <span>{loading ? 'SIGNING IN...' : 'ENTER SHOP'}</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
-          </div>
+          </form>
+
         </div>
       </div>
 
-      <div className="text-center text-xs font-mono text-neutral-600">
-        Fabriq ERP • Floor Staff Authenticator v2.4
+      {/* Page Footer */}
+      <div className="max-w-6xl mx-auto w-full text-center text-xs font-mono text-zinc-500 dark:text-zinc-500 py-2 relative z-10">
+        Fabriq Industrial Textile ERP &copy; 2026.
       </div>
     </div>
   );

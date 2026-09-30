@@ -1,3 +1,5 @@
+import { Invoice, SaleOrder } from '../types';
+
 // Helper utility to convert numbers into Indian Currency Words (e.g., Rupees Fifty Thousand Only)
 export function numberToIndianWords(num: number): string {
   if (isNaN(num) || num === 0) return 'Rupees Zero Only';
@@ -108,3 +110,83 @@ export function calculateGSTBreakdown(
     };
   }
 }
+
+// Auto-generate Sales Invoice Number sequence: INV-YYYY-XXXX (just like purchase BILL-YYYY-XXXX)
+export function getNextInvoiceNumber(
+  invoices: Array<{ invoiceNumber?: string; invoiceCode?: string }> = [],
+  sales?: Array<{ invoiceNumber?: string; invoiceCode?: string }>
+): string {
+  const year = new Date().getFullYear();
+  let maxNum = 0;
+  const pool = [...(invoices || []), ...(sales || [])];
+  pool.forEach(item => {
+    const code = item?.invoiceNumber || item?.invoiceCode || '';
+    if (code) {
+      const match = code.match(/INV-(\d{4})-(\d+)/i) || code.match(/INV-(\d+)/i);
+      if (match) {
+        const num = match[2] ? parseInt(match[2], 10) : parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+  });
+  return `INV-${year}-${String(maxNum + 1).padStart(4, '0')}`;
+}
+
+// Uniform resolver to get an Invoice object from a SaleOrder
+export function resolveInvoiceForSale(
+  s: SaleOrder,
+  invoices: Invoice[] = [],
+  customerPhone?: string
+): Invoice {
+  const matched = (invoices || []).find(inv =>
+    (s.invoiceId && inv.id === s.invoiceId) ||
+    (inv.saleId && inv.saleId === s.id) ||
+    (s.invoiceNumber && (inv.invoiceNumber === s.invoiceNumber || inv.invoiceCode === s.invoiceNumber))
+  );
+
+  const phone = customerPhone || (s as any).customerPhone || matched?.customerPhone || '';
+
+  if (matched) {
+    return {
+      ...matched,
+      customerPhone: matched.customerPhone || phone
+    };
+  }
+
+  const items = (s.items || (s as any).lineItems || []).map((it: any) => ({
+    finishedInventoryId: it.finishedInventoryId || 'item',
+    productName: it.productName || it.itemName || 'Garment Item',
+    quantity: Number(it.quantity || 1),
+    unitPrice: Number(it.unitPrice || 0),
+    total: Number(it.total || (Number(it.quantity || 1) * Number(it.unitPrice || 0)))
+  }));
+
+  const totalAmount = Number(s.totalAmount ?? (s as any).grandTotal ?? 0);
+  const gstAmount = Number(s.gstAmount ?? 0);
+  const subtotal = Number(s.subtotal ?? (totalAmount - gstAmount));
+  const invNum = s.invoiceNumber || (s.invoiceId ? `INV-${s.invoiceId}` : `INV-${s.id}`);
+
+  return {
+    id: s.invoiceId || `inv-${s.id}`,
+    invoiceCode: invNum,
+    invoiceNumber: invNum,
+    saleId: s.id,
+    customerId: s.customerId,
+    customerName: s.customerName,
+    customerPhone: phone,
+    client: s.customerName,
+    amount: totalAmount,
+    totalAmount: totalAmount,
+    subtotal: subtotal,
+    taxRate: s.gstRate || 0,
+    taxAmount: gstAmount,
+    date: s.saleDate || (s as any).orderDate || (s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+    issueDate: s.saleDate || (s as any).orderDate || (s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+    status: (s.paymentStatus === 'Paid' || (s as any).paymentStatus === 'Received') ? 'Paid' : 'Pending',
+    items: items,
+    lineItems: items,
+    paymentMode: 'Bank Transfer'
+  };
+}
+
+

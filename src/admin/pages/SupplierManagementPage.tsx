@@ -5,20 +5,7 @@ import { useFabriqData } from '../../context/FabriqDataContext';
 import { Supplier } from '../../types';
 import { Badge, Modal, ConfirmDeleteModal } from '../components/AdminUIComponents';
 import { sortLatest } from '../../utils/sortUtils';
-
-// Helper to generate next sequential Supplier ID
-const generateNextSupplierId = (list: Supplier[]) => {
-  let maxNum = 0;
-  list.forEach(s => {
-    const val = s.code || s.supplierId || s.id || '';
-    const match = val.match(/(\d+)/);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-  });
-  return `SUP-${String(maxNum + 1).padStart(3, '0')}`;
-};
+import { getNextSupplierId } from '../../utils/supplierUtils';
 
 export const SupplierManagementPage: React.FC = () => {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useFabriqData();
@@ -42,7 +29,7 @@ export const SupplierManagementPage: React.FC = () => {
 
   const openCreateModal = () => {
     setEditingItem(null);
-    setSupplierId(generateNextSupplierId(suppliers));
+    setSupplierId(getNextSupplierId(suppliers));
     setName('');
     setPhone('');
     setAddress('');
@@ -356,9 +343,8 @@ export const SupplierManagementPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Supplier ID */}
             <div className="space-y-1">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
-                <span>Supplier ID</span>
-                <span className="text-[10px] text-zinc-400 font-normal">(Auto-generated, editable)</span>
+              <label className="text-xs font-mono font-bold uppercase text-zinc-500">
+                Supplier ID
               </label>
               <input
                 type="text"
@@ -400,16 +386,22 @@ export const SupplierManagementPage: React.FC = () => {
 
             {/* Supplier Mobile No - COMPULSORY */}
             <div className="space-y-1">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
-                <span>Mobile Number</span>
-                <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
+                  <span>Mobile Number</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] font-mono text-zinc-400">10 digits</span>
+              </div>
               <input
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
                 required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 98765 43210"
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="9876543210"
                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
               />
             </div>

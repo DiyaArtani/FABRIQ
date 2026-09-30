@@ -368,7 +368,7 @@ export const WarehouseManagementPage: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer"
           >
-            <option value="All">All Facilities ({warehouses.length})</option>
+            <option value="All">All Facilities</option>
             <option value="Active">Active</option>
             <option value="Maintenance">Maintenance</option>
             <option value="Full">Full</option>
@@ -646,9 +646,8 @@ export const WarehouseManagementPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500 flex items-center gap-1">
-                <span>Warehouse ID</span>
-                <span className="text-[10px] text-zinc-400 font-normal">(Auto-generated, editable)</span>
+              <label className="text-xs font-mono font-bold uppercase text-zinc-500">
+                Warehouse ID
               </label>
               <input
                 type="text"
@@ -773,12 +772,18 @@ export const WarehouseManagementPage: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500">Supervisor Phone</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold uppercase text-zinc-500">Supervisor Phone</label>
+                <span className="text-[10px] font-mono text-zinc-400">10 digits</span>
+              </div>
               <input
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 98765 43210"
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="9876543210"
                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
               />
             </div>

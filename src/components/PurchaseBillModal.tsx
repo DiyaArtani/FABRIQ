@@ -117,6 +117,7 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
   }
 
   const calculatedItemsTotal = lineItems.reduce((sum, it) => sum + (it.subtotal || it.amount || (it.meters * it.rate)), 0);
+  const totalMeters = lineItems.reduce((sum, it) => sum + (Number(it.meters) || 0), 0);
   const subtotal = resolvedPurchase?.subtotal || (resolvedRawItem ? (resolvedRawItem.totalMeters * resolvedRawItem.costPerMeter) : calculatedItemsTotal);
   const gstRate = resolvedPurchase?.gstRate !== undefined ? resolvedPurchase.gstRate : 5;
   const gstDetails = calculateGSTBreakdown(subtotal, false, gstRate);
@@ -201,18 +202,15 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
                   {settings.companyName || 'FABRIQ TEXTILE & APPAREL ERP'}
                 </h1>
               </div>
-              <p className="text-[11px] text-zinc-500 mt-1 max-w-sm">
-                Central Mills &amp; Inward Fabric Receiving Depo
-              </p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-mono mt-1">
-                <span><strong>GSTIN:</strong> {settings.gstin || '24AAACF9876E1Z2'}</span>
-                <span><strong>STATE CODE:</strong> 24 (Gujarat)</span>
+                {settings.contactPhone && <span><strong>Phone:</strong> {settings.contactPhone}</span>}
+                {settings.companyEmail && <span><strong>Email:</strong> {settings.companyEmail}</span>}
               </div>
             </div>
 
             <div className="text-right sm:text-right w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-200">
               <span className="inline-block px-2.5 py-0.5 bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded mb-1">
-                RAW MATERIAL PURCHASE TAX INVOICE
+                RAW MATERIAL PURCHASE BILL
               </span>
               <div className="font-hanken font-black text-xl text-emerald-600 dark:text-emerald-400 tracking-tight">
                 {billNo}
@@ -245,7 +243,6 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
               </p>
               <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
                 <div><strong>Phone:</strong> {resolvedSupplier.phone || 'N/A'}</div>
-                {resolvedSupplier.email && <div><strong>Email:</strong> {resolvedSupplier.email}</div>}
                 {resolvedSupplier.gstin && (
                   <div className="text-emerald-600 dark:text-emerald-400 font-bold">
                     <strong>GSTIN:</strong> {resolvedSupplier.gstin}
@@ -287,7 +284,6 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
                   <th className="p-3 w-10 text-center">#</th>
                   <th className="p-3">Fabric Description &amp; Specifications</th>
                   <th className="p-3 text-center">Width</th>
-                  <th className="p-3 text-center">HSN Code</th>
                   <th className="p-3 text-right">Meters</th>
                   <th className="p-3 text-right">Rate / Meter</th>
                   <th className="p-3 text-right">Total Amount</th>
@@ -310,7 +306,6 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
                       <td className="p-3 text-center font-mono text-zinc-600 dark:text-zinc-400">
                         {item.width || resolvedRawItem?.width || '58"'}
                       </td>
-                      <td className="p-3 text-center font-mono text-zinc-500">52081990</td>
                       <td className="p-3 text-right font-bold text-zinc-900 dark:text-zinc-100">
                         {(item.meters || 0).toLocaleString()} m
                       </td>
@@ -327,7 +322,7 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
             </table>
           </div>
 
-          {/* Calculations, Tax Summary & Words */}
+          {/* Calculations, Summary & Words */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
             {/* Left Box: Amount in Words */}
             <div className="space-y-4">
@@ -347,22 +342,18 @@ export const PurchaseBillModal: React.FC<PurchaseBillModalProps> = ({
               )}
             </div>
 
-            {/* Right Box: Tax Breakdown & Grand Total */}
+            {/* Right Box: Bill Summary & Grand Total */}
             <div className="bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 font-mono text-xs">
               <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                <span>Taxable Subtotal:</span>
+                <span>Total Quantity:</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">{totalMeters.toLocaleString()} m</span>
+              </div>
+              <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                <span>Subtotal:</span>
                 <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between text-zinc-500 text-[11px]">
-                <span>CGST ({gstDetails.cgstRate}%):</span>
-                <span>₹{gstDetails.cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-zinc-500 text-[11px]">
-                <span>SGST ({gstDetails.sgstRate}%):</span>
-                <span>₹{gstDetails.sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
               <div className="border-t border-zinc-200 dark:border-zinc-800 pt-2 flex justify-between font-black text-sm text-zinc-900 dark:text-zinc-100">
-                <span>Total Invoice Value:</span>
+                <span>Total Bill Value:</span>
                 <span className="text-emerald-600 dark:text-emerald-400">
                   ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>

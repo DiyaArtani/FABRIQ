@@ -85,7 +85,7 @@ export const UserManagementPage: React.FC = () => {
     const role = u.role === 'Admin' ? 'Admin' : 'Employee';
     setFormRole(role);
     setFormPassword(u.password || (u.role === 'Admin' ? u.pin || '' : ''));
-    setFormPin(u.pin || '1234');
+    setFormPin(u.pin || '');
     setShowPassword(false);
     setFormError(null);
     setIsModalOpen(true);
@@ -325,7 +325,7 @@ export const UserManagementPage: React.FC = () => {
                       ) : (
                         <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 rounded inline-flex items-center gap-1.5">
                           <Key className="w-3 h-3 text-emerald-500" />
-                          <span>PIN: {u.pin || '1234'}</span>
+                          <span>PIN: {u.pin || 'Not Set'}</span>
                         </span>
                       )}
                     </div>
@@ -429,13 +429,19 @@ export const UserManagementPage: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-mono font-bold uppercase text-zinc-500">Phone Number</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold uppercase text-zinc-500">Phone Number</label>
+                <span className="text-[10px] font-mono text-zinc-400">10 digits</span>
+              </div>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
                 required
                 value={formPhone}
-                onChange={(e) => setFormPhone(e.target.value)}
-                placeholder="+91 98765 43210"
+                onChange={(e) => setFormPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="9876543210"
                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
               />
             </div>
