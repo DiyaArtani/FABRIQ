@@ -8,7 +8,8 @@ import {
   ArrowRight,
   AlertCircle,
   Sun,
-  Moon
+  Moon,
+  ShieldCheck
 } from 'lucide-react';
 import { useAdminAuth } from '../../admin/context/AdminAuthContext';
 import { useFabriqData } from '../../context/FabriqDataContext';
@@ -132,6 +133,16 @@ export const EmployeeLoginPage: React.FC = () => {
 
         {/* Live Status Badge & Theme Toggle */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500/50 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+            title="Go to Admin Portal"
+          >
+            <ShieldCheck className="w-4 h-4 text-white" />
+            <span className="hidden sm:inline">Admin Portal</span>
+          </button>
+
           <button
             type="button"
             onClick={toggleTheme}

@@ -14,9 +14,16 @@ import { useAdminAuth } from '../context/AdminAuthContext';
 import { useFabriqData } from '../../context/FabriqDataContext';
 
 export const AdminLoginPage: React.FC = () => {
-  const { loginAsAdmin } = useAdminAuth();
+  const { loginAsAdmin, isAdminAuthenticated } = useAdminAuth();
   const { settings } = useFabriqData();
   const navigate = useNavigate();
+
+  // If already authenticated as admin, jump straight to dashboard
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [isAdminAuthenticated, navigate]);
 
   // Dark/Light Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -99,6 +106,16 @@ export const AdminLoginPage: React.FC = () => {
 
         {/* Live Status Badge & Theme Toggle */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="p-2.5 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+            title="Go to Employee Portal"
+          >
+            <Smartphone className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+            <span className="hidden sm:inline">Employee Portal</span>
+          </button>
+
           <button
             type="button"
             onClick={toggleTheme}
