@@ -309,7 +309,7 @@ export interface Purchase {
   items?: PurchaseItem[];
 }
 
-export type InvoiceStatus = 'Paid' | 'Pending' | 'Overdue' | 'Cancelled';
+export type InvoiceStatus = 'Paid' | 'Partial' | 'Pending' | 'Overdue' | 'Cancelled';
 
 export interface InvoiceLineItem {
   finishedInventoryId?: string;
@@ -347,6 +347,8 @@ export interface Invoice {
   taxAmount?: number;
   discountAmount?: number;
   totalAmount?: number;
+  paidAmount?: number;
+  outstandingBalance?: number;
   paymentMethod?: string;
   paymentMode?: string;
   notes?: string;
@@ -388,6 +390,7 @@ export interface SaleOrder {
   grandTotal?: number;
   totalAmount: number;
   paidAmount?: number;
+  outstandingBalance?: number;
   shippingAddress?: string;
   invoiceId?: string;
   invoiceNumber?: string;

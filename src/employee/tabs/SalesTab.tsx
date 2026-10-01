@@ -4,7 +4,6 @@ import { Invoice } from '../../types';
 import { useFabriqData } from '../../context/FabriqDataContext';
 import { Search, Plus, ShoppingCart, FileText, Printer } from 'lucide-react';
 import { TaxInvoiceModal } from '../components/TaxInvoiceModal';
-import { WhatsAppShareModal, WhatsAppIcon } from '../../components/WhatsAppShareModal';
 import { Customer } from '../../types';
 import { sortLatest } from '../../utils/sortUtils';
 import { resolveInvoiceForSale } from '../../lib/invoiceUtils';
@@ -32,16 +31,19 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [whatsAppData, setWhatsAppData] = useState<{ invoice: Invoice; customer: Customer | null } | null>(null);
 
-  // Calculate totals
-  const totalPaid = invoices
-    .filter(inv => inv.status === 'Paid')
-    .reduce((sum, current) => sum + current.amount, 0);
+  // Calculate totals by accurately deducting partial amounts received
+  const totalPaid = sales.reduce((sum, s) => {
+    const total = Number(s.grandTotal ?? s.totalAmount ?? 0);
+    const paid = Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? total : 0));
+    return sum + paid;
+  }, 0);
 
-  const totalPending = invoices
-    .filter(inv => inv.status === 'Pending')
-    .reduce((sum, current) => sum + current.amount, 0);
+  const totalPending = sales.reduce((sum, s) => {
+    const total = Number(s.grandTotal ?? s.totalAmount ?? 0);
+    const paid = Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? total : 0));
+    return sum + Math.max(0, total - paid);
+  }, 0);
 
   const filteredSales = sortLatest(sales.filter(s => {
     const cust = (s.customerName || '').toLowerCase();
@@ -136,12 +138,18 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
               ) : (
                 filteredSales.map((s) => {
                   const invObj = resolveInvoiceForSale(s, invoices);
+                  const totalBilled = Number(s.grandTotal ?? s.totalAmount ?? 0);
+                  const paidAmt = Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? totalBilled : 0));
+                  const outstanding = Math.max(0, totalBilled - paidAmt);
+                  const isPartial = paidAmt > 0 && paidAmt < totalBilled;
+                  const isPaid = paidAmt >= totalBilled || s.paymentStatus === 'Paid';
+
                   return (
                     <div
                       key={s.id}
                       className="bento-card bg-white dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-all space-y-2.5"
                     >
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start gap-2">
                         <div>
                           <div className="flex items-center gap-1.5">
                             <FileText className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -153,9 +161,20 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
                             {s.customerName}
                           </h3>
                         </div>
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">
-                          {s.status}
-                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                            isPaid 
+                              ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
+                              : isPartial 
+                                ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' 
+                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}>
+                            {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'PENDING'}
+                          </span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                            {s.status}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="space-y-1 bg-gray-50 dark:bg-neutral-950 p-2 rounded-lg text-xs font-mono">
@@ -165,9 +184,23 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
                             <span className="font-bold text-emerald-600">₹{item.total.toLocaleString('en-IN')}</span>
                           </div>
                         ))}
-                        <div className="border-t border-gray-200 dark:border-neutral-800 pt-1 flex justify-between font-bold text-xs">
-                          <span>Total Billed</span>
-                          <span className="text-emerald-700 dark:text-emerald-400">₹{s.totalAmount.toLocaleString('en-IN')}</span>
+                        <div className="border-t border-gray-200 dark:border-neutral-800 pt-1.5 space-y-0.5">
+                          <div className="flex justify-between font-bold text-xs">
+                            <span>Total Billed</span>
+                            <span className="text-zinc-900 dark:text-zinc-100">₹{totalBilled.toLocaleString('en-IN')}</span>
+                          </div>
+                          {paidAmt > 0 && (
+                            <div className="flex justify-between text-[11px] text-emerald-600 dark:text-emerald-400">
+                              <span>Amount Received:</span>
+                              <span className="font-semibold">- ₹{paidAmt.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold text-xs pt-0.5 border-t border-dashed border-gray-200 dark:border-neutral-800">
+                            <span>Outstanding Balance:</span>
+                            <span className={outstanding > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                              ₹{outstanding.toLocaleString('en-IN')}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -175,26 +208,11 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
                         <span>Date: {s.saleDate}</span>
                         <div className="flex items-center gap-1.5">
                           <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setWhatsAppData({
-                                invoice: invObj,
-                                customer: customers.find(c => c.id === s.customerId) || null
-                              });
-                            }}
-                            className="px-2 py-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] border border-[#25D366]/30 rounded font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Send Invoice on WhatsApp"
-                          >
-                            <WhatsAppIcon className="w-3 h-3 text-[#25D366]" />
-                            <span>WhatsApp</span>
-                          </button>
-                          <button
                             onClick={() => setSelectedInvoice(invObj)}
-                            className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Printer className="w-3 h-3" />
-                            <span>Invoice</span>
+                            <span>View Invoice</span>
                           </button>
                         </div>
                       </div>
@@ -219,20 +237,6 @@ export default function SalesTab({ initialView, onClearInitialView }: SalesTabPr
               onClose={() => setSelectedInvoice(null)}
               invoice={selectedInvoice}
               customer={customers.find(c => c.id === selectedInvoice?.customerId) || null}
-            />
-
-            {/* WhatsApp Share Modal */}
-            <WhatsAppShareModal
-              isOpen={!!whatsAppData}
-              onClose={() => setWhatsAppData(null)}
-              invoice={whatsAppData?.invoice || null}
-              customer={whatsAppData?.customer || null}
-              onViewInvoice={() => {
-                if (whatsAppData?.invoice) {
-                  setSelectedInvoice(whatsAppData.invoice);
-                  setWhatsAppData(null);
-                }
-              }}
             />
           </motion.div>
         )}

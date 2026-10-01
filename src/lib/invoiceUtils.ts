@@ -146,9 +146,23 @@ export function resolveInvoiceForSale(
 
   const phone = customerPhone || (s as any).customerPhone || matched?.customerPhone || '';
 
+  const totalAmount = Number(s.totalAmount ?? (s as any).grandTotal ?? 0);
+  const paidAmount = Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? totalAmount : 0));
+  const outstandingBalance = Math.max(0, totalAmount - paidAmount);
+
   if (matched) {
+    const matchedTotal = Number(matched.amount || matched.totalAmount || totalAmount);
+    const matchedPaid = Number(matched.paidAmount ?? s.paidAmount ?? (matched.status === 'Paid' || s.paymentStatus === 'Paid' ? matchedTotal : 0));
+    const matchedOutstanding = Math.max(0, matchedTotal - matchedPaid);
+    const resolvedStatus: InvoiceStatus = matchedPaid >= matchedTotal 
+      ? 'Paid' 
+      : (matchedPaid > 0 ? 'Partial' : (matched.status || (s.paymentStatus === 'Partial' ? 'Partial' : 'Pending')));
+
     return {
       ...matched,
+      paidAmount: matchedPaid,
+      outstandingBalance: matchedOutstanding,
+      status: resolvedStatus,
       customerPhone: matched.customerPhone || phone
     };
   }
@@ -161,10 +175,13 @@ export function resolveInvoiceForSale(
     total: Number(it.total || (Number(it.quantity || 1) * Number(it.unitPrice || 0)))
   }));
 
-  const totalAmount = Number(s.totalAmount ?? (s as any).grandTotal ?? 0);
   const gstAmount = Number(s.gstAmount ?? 0);
   const subtotal = Number(s.subtotal ?? (totalAmount - gstAmount));
   const invNum = s.invoiceNumber || (s.invoiceId ? `INV-${s.invoiceId}` : `INV-${s.id}`);
+
+  const resolvedStatus: InvoiceStatus = paidAmount >= totalAmount
+    ? 'Paid'
+    : (paidAmount > 0 || s.paymentStatus === 'Partial' ? 'Partial' : 'Pending');
 
   return {
     id: s.invoiceId || `inv-${s.id}`,
@@ -177,15 +194,17 @@ export function resolveInvoiceForSale(
     client: s.customerName,
     amount: totalAmount,
     totalAmount: totalAmount,
+    paidAmount: paidAmount,
+    outstandingBalance: outstandingBalance,
     subtotal: subtotal,
     taxRate: s.gstRate || 0,
     taxAmount: gstAmount,
     date: s.saleDate || (s as any).orderDate || (s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
     issueDate: s.saleDate || (s as any).orderDate || (s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
-    status: (s.paymentStatus === 'Paid' || (s as any).paymentStatus === 'Received') ? 'Paid' : 'Pending',
+    status: resolvedStatus,
     items: items,
     lineItems: items,
-    paymentMode: 'Bank Transfer'
+    paymentMode: s.paymentMode || s.paymentMethod || 'Bank Transfer'
   };
 }
 

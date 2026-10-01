@@ -1587,9 +1587,19 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       customers.find(c => (c.name || c.companyName || '').toLowerCase() === (saleData.customerName || '').toLowerCase());
     const resolvedPhone = saleData.customerPhone || customerObj?.phone || '';
 
-    const finalPaymentStatus = saleData.paymentStatus || 'Pending';
     const finalPaymentMethod = saleData.paymentMethod || saleData.paymentMode || 'Bank Transfer';
-    const finalPaidAmount = saleData.paidAmount ?? (finalPaymentStatus === 'Paid' ? grandTotal : 0);
+    const finalPaidAmount = saleData.paidAmount !== undefined
+      ? Number(saleData.paidAmount)
+      : (saleData.paymentStatus === 'Paid' ? grandTotal : 0);
+    const finalOutstandingBalance = Math.max(0, grandTotal - finalPaidAmount);
+    const finalPaymentStatus: 'Paid' | 'Partial' | 'Pending' | 'Unpaid' = 
+      finalPaidAmount >= grandTotal
+        ? 'Paid'
+        : (finalPaidAmount > 0 ? 'Partial' : (saleData.paymentStatus || 'Pending'));
+    const finalInvoiceStatus: InvoiceStatus = 
+      finalPaidAmount >= grandTotal
+        ? 'Paid'
+        : (finalPaidAmount > 0 ? 'Partial' : 'Pending');
 
     const newSale: SaleOrder = {
       ...saleData,
@@ -1606,6 +1616,7 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       paymentMethod: finalPaymentMethod,
       paymentMode: finalPaymentMethod,
       paidAmount: finalPaidAmount,
+      outstandingBalance: finalOutstandingBalance,
       createdAt: now
     };
 
@@ -1626,7 +1637,9 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       taxRate: gstRate,
       taxAmount: gstAmount,
       totalAmount: grandTotal,
-      status: finalPaymentStatus === 'Paid' ? 'Paid' : 'Pending',
+      paidAmount: finalPaidAmount,
+      outstandingBalance: finalOutstandingBalance,
+      status: finalInvoiceStatus,
       itemsCount: saleData.items.reduce((sum, item) => sum + item.quantity, 0),
       itemsSummary: saleData.items.map(item => `${item.quantity} × ${item.productName}`).join(', '),
       saleId: saleId,
@@ -1635,6 +1648,11 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       paymentMethod: finalPaymentMethod,
       paymentMode: finalPaymentMethod
     };
+
+    if (customerObj) {
+      const newCustomerBalance = Math.max(0, (customerObj.outstandingBalance || 0) + finalOutstandingBalance);
+      setCustomers(prev => prev.map(c => c.id === customerObj.id ? { ...c, outstandingBalance: newCustomerBalance } : c));
+    }
 
     // Deduct finished inventory locally
     setFinishedInventory(prev => {
@@ -1712,8 +1730,32 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateSale = (data: SaleOrder) => {
-    setSales(prev => prev.map(s => s.id === data.id ? data : s));
-    if (isFirebaseConfigured) saveDocument(COLLECTIONS.SALES, data).catch(console.error);
+    const total = data.grandTotal ?? data.totalAmount ?? 0;
+    const paid = Number(data.paidAmount ?? (data.paymentStatus === 'Paid' ? total : 0));
+    const outstanding = Math.max(0, total - paid);
+    const updatedSale: SaleOrder = {
+      ...data,
+      paidAmount: paid,
+      outstandingBalance: outstanding,
+      paymentStatus: paid >= total ? 'Paid' : (paid > 0 ? 'Partial' : (data.paymentStatus || 'Pending'))
+    };
+
+    setSales(prev => prev.map(s => s.id === data.id ? updatedSale : s));
+
+    // Also sync the linked invoice
+    setInvoices(prev => prev.map(inv => {
+      if (inv.saleId === data.id || inv.id === data.invoiceId || (data.invoiceNumber && (inv.invoiceNumber === data.invoiceNumber || inv.invoiceCode === data.invoiceNumber))) {
+        return {
+          ...inv,
+          paidAmount: paid,
+          outstandingBalance: outstanding,
+          status: (paid >= total ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')) as InvoiceStatus
+        };
+      }
+      return inv;
+    }));
+
+    if (isFirebaseConfigured) saveDocument(COLLECTIONS.SALES, updatedSale).catch(console.error);
     addAuditLog('Admin', 'SALE_UPDATE', 'Sales & Billing', `Updated sale invoice ${data.invoiceNumber || data.id}`);
   };
 
@@ -1879,9 +1921,33 @@ export const FabriqDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateInvoice = (data: Invoice) => {
-    setInvoices(prev => prev.map(i => i.id === data.id ? data : i));
-    if (isFirebaseConfigured) saveDocument(COLLECTIONS.INVOICES, data).catch(console.error);
-    addAuditLog('Admin', 'INVOICE_OVERRIDE', 'Sales & Billing', `Updated invoice ${data.invoiceCode || data.invoiceNumber} status to ${data.status}`);
+    const total = data.totalAmount ?? data.amount ?? 0;
+    const paid = Number(data.paidAmount ?? (data.status === 'Paid' ? total : 0));
+    const outstanding = Math.max(0, total - paid);
+    const updatedInv: Invoice = {
+      ...data,
+      paidAmount: paid,
+      outstandingBalance: outstanding,
+      status: (paid >= total ? 'Paid' : (paid > 0 ? 'Partial' : data.status)) as InvoiceStatus
+    };
+
+    setInvoices(prev => prev.map(i => i.id === data.id ? updatedInv : i));
+
+    // Also sync linked sale
+    setSales(prev => prev.map(s => {
+      if (s.invoiceId === data.id || (data.saleId && s.id === data.saleId) || (data.invoiceNumber && (s.invoiceNumber === data.invoiceNumber || s.saleCode === data.invoiceNumber))) {
+        return {
+          ...s,
+          paidAmount: paid,
+          outstandingBalance: outstanding,
+          paymentStatus: paid >= total ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')
+        };
+      }
+      return s;
+    }));
+
+    if (isFirebaseConfigured) saveDocument(COLLECTIONS.INVOICES, updatedInv).catch(console.error);
+    addAuditLog('Admin', 'INVOICE_OVERRIDE', 'Sales & Billing', `Updated invoice ${data.invoiceCode || data.invoiceNumber} status to ${updatedInv.status}`);
   };
 
   const deleteInvoice = (id: string) => {

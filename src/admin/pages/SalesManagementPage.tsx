@@ -67,6 +67,7 @@ export const SalesManagementPage: React.FC = () => {
   const [editingInv, setEditingInv] = useState<Invoice | null>(null);
   const [invStatus, setInvStatus] = useState<Invoice['status']>('Pending');
   const [invPaymentMode, setInvPaymentMode] = useState('Bank Transfer');
+  const [invPaidAmount, setInvPaidAmount] = useState<number>(0);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [whatsAppData, setWhatsAppData] = useState<{ invoice: Invoice; customer: Customer | null } | null>(null);
@@ -298,16 +299,24 @@ export const SalesManagementPage: React.FC = () => {
     setEditingInv(inv);
     setInvStatus(inv.status);
     setInvPaymentMode(inv.paymentMode || 'Bank Transfer');
+    const invTotal = Number(inv.totalAmount ?? inv.amount ?? 0);
+    const paid = Number(inv.paidAmount ?? (inv.status === 'Paid' ? invTotal : 0));
+    setInvPaidAmount(paid);
     setIsInvEditOpen(true);
   };
 
   const handleInvEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingInv) {
+      const invTotal = Number(editingInv.totalAmount ?? editingInv.amount ?? 0);
+      const finalPaid = invStatus === 'Paid' ? invTotal : (invStatus === 'Partial' ? (invPaidAmount || 0) : 0);
+      const finalOutstanding = Math.max(0, invTotal - finalPaid);
       updateInvoice({
         ...editingInv,
         status: invStatus,
-        paymentMode: invPaymentMode
+        paymentMode: invPaymentMode,
+        paidAmount: finalPaid,
+        outstandingBalance: finalOutstanding
       });
     }
     setIsInvEditOpen(false);
@@ -367,7 +376,7 @@ export const SalesManagementPage: React.FC = () => {
       const custName = getCustomerDisplayName(s.customerId, s.customerName).toLowerCase();
       const invNumStr = (s.invoiceNumber || s.invoiceId || '').toLowerCase();
       const matchesSearch = custName.includes(term) || invNumStr.includes(term);
-      const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter;
+      const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter || s.paymentStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
     return sortLatest(list);
@@ -417,6 +426,7 @@ export const SalesManagementPage: React.FC = () => {
           >
             <option value="ALL">All Statuses</option>
             <option value="Paid">Paid</option>
+            <option value="Partial">Partial</option>
             <option value="Pending">Pending</option>
             <option value="Overdue">Overdue</option>
             <option value="Cancelled">Cancelled</option>
@@ -483,11 +493,48 @@ export const SalesManagementPage: React.FC = () => {
                         </div>
                       ))}
                     </td>
-                    <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                      ₹{s.totalAmount.toLocaleString('en-IN')}
-                    </td>
-                    <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.saleDate}</td>
-                    <td className="p-3"><Badge status={s.status} /></td>
+                    {(() => {
+                      const totalAmt = Number(s.grandTotal ?? s.totalAmount ?? 0);
+                      const paidAmt = Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? totalAmt : 0));
+                      const outstanding = Math.max(0, totalAmt - paidAmt);
+                      const isPartial = paidAmt > 0 && paidAmt < totalAmt;
+                      const isPaid = paidAmt >= totalAmt || s.paymentStatus === 'Paid';
+
+                      return (
+                        <>
+                          <td className="p-3">
+                            <div className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                              ₹{totalAmt.toLocaleString('en-IN')}
+                            </div>
+                            {paidAmt > 0 && (
+                              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium">
+                                Received: ₹{paidAmt.toLocaleString('en-IN')}
+                              </div>
+                            )}
+                            {outstanding > 0 && (
+                              <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-0.5">
+                                Due: ₹{outstanding.toLocaleString('en-IN')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.saleDate}</td>
+                          <td className="p-3">
+                            <div className="flex flex-col items-start gap-1">
+                              <span className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${
+                                isPaid 
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' 
+                                  : isPartial 
+                                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' 
+                                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                              }`}>
+                                {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'PENDING'}
+                              </span>
+                              <Badge status={s.status} />
+                            </div>
+                          </td>
+                        </>
+                      );
+                    })()}
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -981,11 +1028,31 @@ export const SalesManagementPage: React.FC = () => {
                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500 cursor-pointer"
               >
                 <option value="Paid">Paid</option>
+                <option value="Partial">Partial</option>
                 <option value="Pending">Pending</option>
                 <option value="Overdue">Overdue</option>
                 <option value="Cancelled">Cancelled</option>
               </select>
             </div>
+            {invStatus === 'Partial' && (
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-xs font-mono font-bold uppercase text-zinc-500">
+                  <label>Amount Received (₹)</label>
+                  <span className="text-amber-600 dark:text-amber-400">
+                    Due: ₹{Math.max(0, (Number(editingInv?.totalAmount ?? editingInv?.amount ?? 0)) - (invPaidAmount || 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={Number(editingInv?.totalAmount ?? editingInv?.amount ?? 0)}
+                  value={invPaidAmount || ''}
+                  onChange={(e) => setInvPaidAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-mono outline-none focus:border-emerald-500"
+                  placeholder="Enter partial amount received"
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-mono font-bold uppercase text-zinc-500">Payment Mode</label>
               <select

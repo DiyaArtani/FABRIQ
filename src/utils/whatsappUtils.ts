@@ -40,7 +40,15 @@ export function buildInvoiceWhatsAppMessage(params: {
   const clientName = customer?.name || customer?.companyName || invoice.customerName || invoice.client || 'Valued Customer';
   const invDate = invoice.date || invoice.issueDate || new Date().toISOString().substring(0, 10);
   const totalAmount = invoice.amount || invoice.totalAmount || 0;
-  const statusEmoji = invoice.status === 'Paid' ? '✅ Paid' : '⏳ Pending / Unpaid';
+  const paidAmount = Number(invoice.paidAmount ?? (invoice.status === 'Paid' ? totalAmount : 0));
+  const outstandingBalance = Number(invoice.outstandingBalance ?? Math.max(0, totalAmount - paidAmount));
+  const isPartial = paidAmount > 0 && paidAmount < totalAmount;
+  const isPaid = paidAmount >= totalAmount || invoice.status === 'Paid';
+  const statusEmoji = isPaid 
+    ? '✅ Paid' 
+    : isPartial 
+      ? `◐ Partial Payment (₹${outstandingBalance.toLocaleString('en-IN')} Due)` 
+      : '⏳ Pending / Unpaid';
 
   // Gather line items
   let itemsList = '';
@@ -86,6 +94,8 @@ export function buildInvoiceWhatsAppMessage(params: {
     itemsList,
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `💰 *TOTAL AMOUNT:* ₹${totalAmount.toLocaleString('en-IN')}`,
+    paidAmount > 0 ? `💵 *AMOUNT RECEIVED:* ₹${paidAmount.toLocaleString('en-IN')}` : '',
+    outstandingBalance > 0 && paidAmount > 0 ? `⚠️ *OUTSTANDING BALANCE DUE:* ₹${outstandingBalance.toLocaleString('en-IN')}` : '',
     invoice.paymentMode ? `💳 *Payment Mode:* ${invoice.paymentMode}` : '',
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `🙏 _Thank you for your business with ${companyName}!_`,
@@ -97,22 +107,36 @@ export function buildInvoiceWhatsAppMessage(params: {
 }
 
 /**
- * Returns the wa.me URL for the given phone number and text message
+/**
+ * Returns the WhatsApp universal URL for the given phone number and optional text message.
+ * If message is omitted or empty, opens clean chat with no pre-filled text.
  */
-export function getWhatsAppShareUrl(phone: string, message: string): string {
+export function getWhatsAppShareUrl(phone: string, message?: string): string {
   const cleanPhone = formatWhatsAppPhone(phone);
-  const encodedText = encodeURIComponent(message);
+  const trimmed = message ? message.trim() : '';
+  const encodedText = trimmed ? encodeURIComponent(trimmed) : '';
   
   if (cleanPhone) {
-    return `https://wa.me/${cleanPhone}?text=${encodedText}`;
+    return encodedText 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}` 
+      : `https://api.whatsapp.com/send?phone=${cleanPhone}`;
   }
-  return `https://wa.me/?text=${encodedText}`;
+  return encodedText ? `https://api.whatsapp.com/send?text=${encodedText}` : `https://api.whatsapp.com/send`;
 }
 
 /**
- * Directly opens WhatsApp Web or App in a new window/tab
+ * Directly opens WhatsApp Web or App to that phone number
  */
-export function openWhatsAppShare(phone: string, message: string): void {
+export function openWhatsAppShare(phone: string, message?: string): Window | null {
   const url = getWhatsAppShareUrl(phone, message);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  let win: Window | null = null;
+  try {
+    win = window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (e) {
+    console.warn('Popup blocked, redirecting window location:', e);
+  }
+  if (!win && typeof window !== 'undefined') {
+    window.location.href = url;
+  }
+  return win;
 }

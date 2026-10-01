@@ -227,7 +227,8 @@ export const CustomerManagementPage: React.FC = () => {
     const totalSalesCount = customerSales.length;
     const totalRevenue = customerSales.reduce((acc, s) => acc + Number(s.grandTotal ?? s.totalAmount ?? 0), 0);
     const totalPaid = customerSales.reduce((acc, s) => acc + Number(s.paidAmount ?? (s.paymentStatus === 'Paid' ? (s.grandTotal ?? s.totalAmount ?? 0) : 0)), 0);
-    const balanceDue = Number(activeCustomer.outstandingBalance || 0);
+    const calculatedDue = Math.max(0, totalRevenue - totalPaid);
+    const balanceDue = Number(activeCustomer.outstandingBalance !== undefined && activeCustomer.outstandingBalance > 0 ? activeCustomer.outstandingBalance : calculatedDue);
     const deliveredCount = customerSales.filter(s => s.status === 'Delivered').length;
 
     return { totalSalesCount, totalRevenue, totalPaid, balanceDue, deliveredCount };

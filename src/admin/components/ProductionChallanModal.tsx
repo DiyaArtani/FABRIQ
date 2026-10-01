@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, X, FileText, Factory, Scissors, Sparkles, Box, PackageCheck, Building2, Layers, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Printer, X, FileText, Factory, Scissors, Sparkles, Box,
+  PackageCheck, Building2, Layers, User, ChevronLeft, ChevronRight,
+  ArrowRightLeft
+} from 'lucide-react';
 import { ProductionOrder, ProductionStage, StageHistoryEntry } from '../../types';
 import { useFabriqData } from '../../context/FabriqDataContext';
 
@@ -59,31 +63,39 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
         const code = stageCodes[stageName] || `STG${idx + 1}`;
         const chNo = stg.challanNumber || `${baseChallan}-${code}`;
         return {
-          ...stg,
-          index: idx,
           stageName,
           challanNumber: chNo,
-          contractorName: stg.contractorName || order.contractorName || order.assignedTo || 'Assigned Job Worker',
-          quantitySent: stg.quantitySent || (idx === 0 ? (order.plannedQuantity || order.quantity || order.total || 0) : (order.completedQuantity || order.quantity || 0)),
-          assignedDate: stg.assignedDate || order.startDate || new Date().toISOString().substring(0, 10),
-          status: stg.status || (idx === (order.stageHistory?.length || 1) - 1 ? 'In Progress' : 'Completed')
+          contractorName: stg.contractorName || 'Assigned Contractor',
+          contractorPhone: stg.contractorPhone || '',
+          contractorLocation: stg.contractorLocation || '',
+          assignedDate: stg.assignedDate || order.assignedDate || new Date().toISOString().substring(0, 10),
+          completedDate: stg.completedDate,
+          quantitySent: stg.quantitySent || order.quantity || order.plannedQuantity || 0,
+          quantityReceived: stg.quantityReceived || 0,
+          quantityCompleted: stg.quantityCompleted || 0,
+          rejectedQuantity: stg.rejectedQuantity || 0,
+          status: stg.status || 'Completed'
         };
       })
     : [
         {
-          index: 0,
-          stageName: order.currentStage || order.stage || 'Cutting',
-          challanNumber: order.challanNumber || `${baseChallan}-CUT`,
-          contractorName: order.contractorName || order.assignedTo || 'Assigned Job Worker',
-          quantitySent: order.plannedQuantity || order.quantity || order.total || 0,
-          assignedDate: order.startDate || new Date().toISOString().substring(0, 10),
-          status: order.status || 'In Progress'
+          stageName: order.currentStage || 'Cutting',
+          challanNumber: order.challanNumber || `${baseChallan}-${stageCodes[order.currentStage || 'Cutting'] || 'CUT'}`,
+          contractorName: order.contractorName || 'Assigned Unit',
+          contractorPhone: order.contractorPhone || '',
+          contractorLocation: order.contractorLocation || '',
+          assignedDate: order.assignedDate || new Date().toISOString().substring(0, 10),
+          completedDate: undefined,
+          quantitySent: order.quantity || order.plannedQuantity || 0,
+          quantityReceived: order.completedQuantity || 0,
+          quantityCompleted: order.completedQuantity || 0,
+          rejectedQuantity: order.rejectedQuantity || 0,
+          status: 'Active'
         }
       ];
 
-  // Default to the latest active stage
+  // Selected stage index to view/print (defaults to active/latest stage)
   const [selectedStageIndex, setSelectedStageIndex] = useState<number>(availableStageChallans.length - 1);
-
   const historyScrollRef = useRef<HTMLDivElement>(null);
 
   const scrollHistory = (direction: 'left' | 'right') => {
@@ -114,7 +126,9 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
   const activeChallan = availableStageChallans[selectedStageIndex] || availableStageChallans[availableStageChallans.length - 1];
 
   const handlePrint = () => {
-    window.print();
+    setTimeout(() => {
+      window.print();
+    }, 50);
   };
 
   const stagesList = [
@@ -183,11 +197,24 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-zinc-950/85 backdrop-blur-xs overflow-y-auto no-scrollbar animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-0 sm:p-4 bg-zinc-950/85 backdrop-blur-xs overflow-y-auto no-scrollbar animate-in fade-in duration-200"
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       <style>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm 12mm 12mm 12mm;
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-size: 11px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           /* Hide all app contents, navigation bars, sidebars, headers */
           body * {
             visibility: hidden !important;
@@ -201,15 +228,44 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
+            max-width: 100% !important;
             margin: 0 !important;
-            padding: 16px !important;
-            background: white !important;
-            color: black !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #09090b !important;
             overflow: visible !important;
             max-height: none !important;
             height: auto !important;
             box-shadow: none !important;
             border: none !important;
+            border-radius: 0 !important;
+          }
+          /* Dark mode print fix: force text dark and backgrounds white */
+          #production-challan-printable,
+          #production-challan-printable * {
+            color: #09090b !important;
+            text-shadow: none !important;
+          }
+          #production-challan-printable .print-emerald-badge {
+            background-color: #047857 !important;
+            color: #ffffff !important;
+          }
+          #production-challan-printable .print-emerald-text {
+            color: #047857 !important;
+          }
+          #production-challan-printable .print-subtle-bg {
+            background-color: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+          }
+          #production-challan-printable table {
+            min-width: 100% !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          #production-challan-printable tr,
+          #production-challan-printable .avoid-break {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
           html, body, #production-challan-printable {
             overflow: visible !important;
@@ -221,38 +277,40 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
             width: 0 !important;
             height: 0 !important;
           }
-          /* Explicitly hide bottom nav and header */
-          nav, header, aside, .glass-nav, [role="navigation"] {
+          /* Explicitly hide bottom nav, action bar and header */
+          .print\\:hidden, nav, header, aside, button, .glass-nav, [role="navigation"] {
             display: none !important;
             visibility: hidden !important;
           }
         }
       `}</style>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-4xl w-full my-auto max-h-[94vh] flex flex-col rounded-2xl overflow-hidden font-mono text-zinc-900 dark:text-zinc-100">
+      
+      {/* Modal Dialog Card */}
+      <div className="bg-white dark:bg-zinc-900 border-0 sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-4xl w-full h-full sm:h-auto sm:my-auto sm:max-h-[94vh] flex flex-col rounded-none sm:rounded-2xl overflow-hidden font-mono text-zinc-900 dark:text-zinc-100">
         
         {/* Top Header Actions (Hidden in Print) */}
-        <div className="p-4 bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
+        <div className="p-3 sm:p-4 bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between print:hidden shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
               <FileText className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="font-hanken font-bold text-base text-zinc-900 dark:text-zinc-100">
+            <div className="min-w-0">
+              <h2 className="font-hanken font-bold text-xs sm:text-base text-zinc-900 dark:text-zinc-100 truncate">
                 Production Order Challan
               </h2>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                Challan Ref: {activeChallan.challanNumber} • Stage: {activeChallan.stageName}
+              <span className="text-[10px] text-zinc-500 font-mono truncate block">
+                {activeChallan.challanNumber} • {activeChallan.stageName}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              className="px-3 sm:px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print Challan</span>
+              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Print</span>
             </button>
 
             <button
@@ -266,7 +324,7 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
 
         {/* Stage Advancement & Saved Challan Selector Bar (Hidden during Print) */}
         {availableStageChallans.length > 1 && (
-          <div className="px-3 py-2 bg-zinc-100/90 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-2 print:hidden relative">
+          <div className="px-2.5 sm:px-3 py-2 bg-zinc-100/90 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1.5 sm:gap-2 print:hidden relative shrink-0">
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-mono font-bold shrink-0 pl-1">
               <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span className="text-[10px] uppercase tracking-wider hidden sm:inline">Challan History:</span>
@@ -283,7 +341,7 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
 
-            {/* Scrollable Container with onWheel support for normal mouse wheel */}
+            {/* Scrollable Container with onWheel support */}
             <div
               ref={historyScrollRef}
               onWheel={(e) => {
@@ -302,7 +360,7 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                     type="button"
                     data-selected={isSelected ? 'true' : 'false'}
                     onClick={() => setSelectedStageIndex(idx)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer flex items-center gap-2 border shadow-2xs ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 border shadow-2xs ${
                       isSelected
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                         : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
@@ -344,18 +402,18 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
         {/* Printable Challan Document Body */}
         <div 
           id="production-challan-printable" 
-          className="p-6 sm:p-10 overflow-y-auto no-scrollbar space-y-6 text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 print:p-0 print:m-0 print:text-black print:bg-white text-xs"
+          className="p-4 sm:p-8 md:p-10 overflow-y-auto no-scrollbar space-y-5 sm:space-y-6 text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 print:p-0 print:m-0 print:text-black print:bg-white text-xs"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           
           {/* Header Banner */}
-          <div className="flex flex-col sm:flex-row justify-between items-start pb-5 border-b-2 border-zinc-900 dark:border-zinc-100 gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start pb-4 sm:pb-5 border-b-2 border-zinc-900 dark:border-zinc-100 gap-3 sm:gap-4 avoid-break">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-8 h-8 bg-white p-0.5 border border-zinc-200 dark:border-zinc-700 shadow-xs flex items-center justify-center rounded overflow-hidden flex-shrink-0">
+                <span className="w-7 h-7 sm:w-8 sm:h-8 bg-white p-0.5 border border-zinc-200 dark:border-zinc-700 shadow-xs flex items-center justify-center rounded overflow-hidden flex-shrink-0">
                   <img src="/logo.png" alt="Fabriq Logo" className="w-full h-full object-contain" />
                 </span>
-                <h1 className="font-hanken font-black text-xl tracking-tight uppercase">
+                <h1 className="font-hanken font-black text-base sm:text-xl tracking-tight uppercase">
                   {settings.companyName || 'FABRIQ TEXTILE & APPAREL ERP'}
                 </h1>
               </div>
@@ -364,68 +422,68 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                   {settings.companyAddress || settings.address}
                 </p>
               )}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-mono mt-1">
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-zinc-600 dark:text-zinc-400 font-mono mt-1">
                 {settings.gstin && <span><strong>GSTIN:</strong> {settings.gstin}</span>}
                 {settings.contactPhone && <span><strong>Phone:</strong> {settings.contactPhone}</span>}
                 {settings.companyEmail && <span><strong>Email:</strong> {settings.companyEmail}</span>}
               </div>
             </div>
 
-            <div className="text-right sm:text-right w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-200">
-              <span className="inline-block px-2.5 py-0.5 bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded mb-1">
+            <div className="text-left sm:text-right w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0 border-zinc-200 dark:border-zinc-800">
+              <span className="inline-block px-2.5 py-0.5 bg-emerald-700 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest rounded mb-1 print-emerald-badge">
                 PRODUCTION ORDER CHALLAN
               </span>
-              <div className="font-hanken font-black text-xl text-emerald-600 dark:text-emerald-400 tracking-tight">
+              <div className="font-hanken font-black text-lg sm:text-xl text-emerald-600 dark:text-emerald-400 tracking-tight print-emerald-text">
                 {activeChallan.challanNumber}
               </div>
-              <div className="text-[11px] text-zinc-500 space-y-0.5 mt-1 font-mono">
+              <div className="text-[10px] sm:text-[11px] text-zinc-500 space-y-0.5 mt-0.5 font-mono">
                 <div><strong>Challan Date:</strong> {activeChallan.assignedDate}</div>
                 <div><strong>PO Code:</strong> {order.poCode || order.orderCode}</div>
-                <div><strong>Challan Stage:</strong> <span className="font-bold text-emerald-600">{activeChallan.stageName}</span></div>
+                <div><strong>Challan Stage:</strong> <span className="font-bold text-emerald-600 print-emerald-text">{activeChallan.stageName}</span></div>
                 <div><strong>Stage Status:</strong> <span className="font-bold text-zinc-700 dark:text-zinc-300">{activeChallan.status}</span></div>
               </div>
             </div>
           </div>
 
           {/* Consignor (Dispatched By) & Consignee (Processor / Contractor) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 p-3.5 sm:p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl print-subtle-bg avoid-break">
             {isFirstStage ? (
               /* First Stage: Dispatched by Fabric Storage Godown */
               <div className="space-y-1">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
                   Dispatched By (Fabric Storage Godown)
                 </span>
-                <h3 className="font-hanken font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                <h3 className="font-hanken font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>{godownInfo.name}</span>
                 </h3>
-                <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-snug">
                   {godownInfo.address || godownInfo.location || 'Central Fabric Storage Facility'}
                 </p>
                 <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
                   <div><strong>Godown In-Charge:</strong> {godownInfo.managerName || 'Stores Manager'}</div>
                   {godownInfo.contactNumber && <div><strong>Contact:</strong> {godownInfo.contactNumber}</div>}
-                  <div><strong>Fabric Stored &amp; Dispatched:</strong> {order.fabricName || rawItem?.fabricName || 'Raw Material Fabric'}</div>
+                  <div><strong>Fabric Stored:</strong> {order.fabricName || rawItem?.fabricName || 'Raw Material Fabric'}</div>
                 </div>
               </div>
             ) : (
               /* Next Upcoming Stages: Dispatched by Previous Stage Person */
               <div className="space-y-1">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
-                  Dispatched &amp; Handed Over By ({prevStagePerson.stageName} Processor)
+                  Dispatched By ({prevStagePerson.stageName} Processor)
                 </span>
-                <h3 className="font-hanken font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-emerald-600" />
+                <h3 className="font-hanken font-bold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>{prevStagePerson.name}</span>
                 </h3>
-                <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-snug">
                   {prevStagePerson.location}
                 </p>
                 <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
-                  <div><strong>Completed Stage:</strong> {prevStagePerson.stageName}</div>
-                  <div><strong>Previous Stage Challan:</strong> {prevStagePerson.challanNumber}</div>
-                  {prevStagePerson.phone && <div><strong>Contact Phone:</strong> {prevStagePerson.phone}</div>}
-                  <div><strong>Handover / Dispatch Date:</strong> {prevStagePerson.handoverDate}</div>
+                  <div><strong>Previous Stage:</strong> {prevStagePerson.stageName}</div>
+                  <div><strong>Prev Challan:</strong> {prevStagePerson.challanNumber}</div>
+                  {prevStagePerson.phone && <div><strong>Phone:</strong> {prevStagePerson.phone}</div>}
+                  <div><strong>Handover Date:</strong> {prevStagePerson.handoverDate}</div>
                 </div>
               </div>
             )}
@@ -434,54 +492,56 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
               <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
                 Assigned Contractor / Job Worker (Consignee)
               </span>
-              <h4 className="font-hanken font-bold text-sm text-zinc-800 dark:text-zinc-200">
+              <h4 className="font-hanken font-bold text-xs sm:text-sm text-zinc-800 dark:text-zinc-200">
                 {activeChallan.contractorName}
               </h4>
-              <p className="text-[11px] text-zinc-500">
+              <p className="text-[11px] text-zinc-500 leading-snug">
                 Location: {activeContractor.location || 'Job Work Unit'}
               </p>
               <div className="text-[10px] text-zinc-500 space-y-0.5 font-mono pt-1">
                 <div><strong>Phone:</strong> {activeContractor.phone || 'N/A'}</div>
-                <div><strong>Current Stage Assigned:</strong> {activeChallan.stageName}</div>
+                <div><strong>Current Stage:</strong> {activeChallan.stageName}</div>
                 <div><strong>Issue / Dispatch Date:</strong> {activeChallan.assignedDate}</div>
               </div>
             </div>
           </div>
 
-          {/* Lifecycle Step Indicators */}
-          <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+          {/* Lifecycle Step Indicators (Responsive scroll on mobile) */}
+          <div className="p-3 sm:p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl print-subtle-bg avoid-break">
             <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block mb-2">
               Production Lifecycle Journey
             </span>
-            <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold">
-              {stagesList.map((stg, i) => {
-                const isPassed = currentStageIndex >= i;
-                const isCurrent = currentStageIndex === i;
-                const Icon = stg.icon;
-                return (
-                  <div
-                    key={stg.name}
-                    className={`p-2 rounded-lg border flex flex-col items-center gap-1 transition-all ${
-                      isCurrent
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                        : isPassed
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
-                        : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 border-zinc-200 dark:border-zinc-800'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate w-full">{stg.name}</span>
-                    {isPassed && !isCurrent && <span className="text-[8px] opacity-80">✓ Done</span>}
-                    {isCurrent && <span className="text-[8px] font-black">Active</span>}
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto pb-1 sm:pb-0">
+              <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold min-w-[360px] sm:min-w-full">
+                {stagesList.map((stg, i) => {
+                  const isPassed = currentStageIndex >= i;
+                  const isCurrent = currentStageIndex === i;
+                  const Icon = stg.icon;
+                  return (
+                    <div
+                      key={stg.name}
+                      className={`p-2 rounded-lg border flex flex-col items-center gap-1 transition-all ${
+                        isCurrent
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs print-emerald-badge'
+                          : isPassed
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
+                          : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 border-zinc-200 dark:border-zinc-800'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate w-full text-[9px] sm:text-[10px]">{stg.name}</span>
+                      {isPassed && !isCurrent && <span className="text-[8px] opacity-80">✓ Done</span>}
+                      {isCurrent && <span className="text-[8px] font-black">Active</span>}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* Job Specifications & Raw Fabric Allocation */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 avoid-break">
+            <div className="p-3.5 sm:p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 text-xs print-subtle-bg">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
                 Job Particulars
               </span>
@@ -495,19 +555,19 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                   <strong className="text-zinc-900 dark:text-zinc-100">{activeChallan.stageName}</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-400 block text-[10px]">STAGE QUANTITY:</span>
-                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                  <span className="text-zinc-400 block text-[10px]">STAGE QTY:</span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold print-emerald-text">
                     {activeChallan.quantitySent} Pcs
                   </strong>
                 </div>
                 <div>
                   <span className="text-zinc-400 block text-[10px]">DUE DATE:</span>
-                  <strong className="text-zinc-900 dark:text-zinc-100">{order.dueDate || 'Standard Pipeline'}</strong>
+                  <strong className="text-zinc-900 dark:text-zinc-100">{order.dueDate || 'Standard'}</strong>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 text-xs">
+            <div className="p-3.5 sm:p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 text-xs print-subtle-bg">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
                 Raw Material Allocation
               </span>
@@ -517,18 +577,18 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                   <strong className="text-zinc-900 dark:text-zinc-100">{order.fabricName || rawItem?.fabricName || 'Raw Denim'}</strong>
                 </div>
                 <div>
-                  <span className="text-zinc-400 block text-[10px]">BILL / INVOICE NO:</span>
+                  <span className="text-zinc-400 block text-[10px]">BATCH / LOT:</span>
                   <strong className="text-zinc-900 dark:text-zinc-100">{order.rawBatchId || rawItem?.invoiceNumber || rawItem?.billNumber || 'N/A'}</strong>
                 </div>
                 <div>
                   <span className="text-zinc-400 block text-[10px]">METERS ISSUED:</span>
-                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
-                    {order.metersAllocated || order.metersRequired || rawItem?.allocatedMeters || 'N/A'} Meters
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold print-emerald-text">
+                    {order.metersAllocated || order.metersRequired || rawItem?.allocatedMeters || 'N/A'} m
                   </strong>
                 </div>
                 <div>
                   <span className="text-zinc-400 block text-[10px]">STORAGE LOCATION:</span>
-                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold print-emerald-text">
                     {godownInfo.name}
                   </strong>
                 </div>
@@ -536,27 +596,29 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
             </div>
           </div>
 
-          {/* Stage Execution History Table */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
+          {/* Stage Execution History Table (Responsive Horizontal Scroll) */}
+          <div className="space-y-1.5 avoid-break">
+            <div className="flex justify-between items-center px-1">
               <h4 className="font-hanken font-bold text-xs uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                Stage Execution History &amp; Quality Audit Trail
+                Stage Execution History &amp; Quality Audit
               </h4>
-              <span className="text-[10px] text-zinc-400 font-mono">Challan Ref: {activeChallan.challanNumber}</span>
+              <span className="flex items-center gap-1 text-[9px] text-zinc-400 sm:hidden print:hidden">
+                <ArrowRightLeft className="w-2.5 h-2.5" /> Swipe table
+              </span>
             </div>
 
-            <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse font-mono">
+            <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto print-subtle-bg">
+              <table className="w-full min-w-[580px] sm:min-w-full text-left text-xs border-collapse font-mono">
                 <thead>
-                  <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 uppercase">
-                    <th className="p-3">Stage</th>
-                    <th className="p-3">Challan Ref</th>
-                    <th className="p-3">Contractor / Unit</th>
-                    <th className="p-3 text-right">Qty Sent</th>
-                    <th className="p-3 text-right">Qty OK</th>
-                    <th className="p-3 text-right">Rejections</th>
-                    <th className="p-3">Log Dates</th>
-                    <th className="p-3">Status</th>
+                  <tr className="bg-zinc-100 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 uppercase print-subtle-bg">
+                    <th className="p-2.5 sm:p-3">Stage</th>
+                    <th className="p-2.5 sm:p-3">Challan Ref</th>
+                    <th className="p-2.5 sm:p-3">Contractor / Unit</th>
+                    <th className="p-2.5 sm:p-3 text-right">Qty Sent</th>
+                    <th className="p-2.5 sm:p-3 text-right">Qty OK</th>
+                    <th className="p-2.5 sm:p-3 text-right">Rejections</th>
+                    <th className="p-2.5 sm:p-3">Log Dates</th>
+                    <th className="p-2.5 sm:p-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -565,30 +627,30 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
                       key={`${stg.stageName}-${idx}`} 
                       className={`hover:bg-zinc-50 dark:hover:bg-zinc-950/50 ${selectedStageIndex === idx ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}`}
                     >
-                      <td className="p-3 font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <td className="p-2.5 sm:p-3 font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
                         <span>{stg.stageName}</span>
                         {selectedStageIndex === idx && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold">Selected</span>
+                          <span className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold print:hidden">Selected</span>
                         )}
                       </td>
-                      <td className="p-3 font-mono text-zinc-600 dark:text-zinc-400 text-[11px] font-bold">
+                      <td className="p-2.5 sm:p-3 font-mono text-zinc-600 dark:text-zinc-400 text-[11px] font-bold">
                         {stg.challanNumber}
                       </td>
-                      <td className="p-3">
-                        <div className="font-bold text-emerald-600 dark:text-emerald-400">{stg.contractorName || 'Assigned Person'}</div>
+                      <td className="p-2.5 sm:p-3">
+                        <div className="font-bold text-emerald-600 dark:text-emerald-400 print-emerald-text">{stg.contractorName || 'Assigned Person'}</div>
                         {(stg.contractorPhone || (contractors.find(c => c.name === stg.contractorName)?.phone)) && (
                           <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
                             Ph: {stg.contractorPhone || contractors.find(c => c.name === stg.contractorName)?.phone}
                           </div>
                         )}
                       </td>
-                      <td className="p-3 text-right font-mono">{stg.quantitySent || 0}</td>
-                      <td className="p-3 text-right font-bold text-zinc-900 dark:text-zinc-100 font-mono">{stg.quantityCompleted || stg.quantityReceived || 0}</td>
-                      <td className="p-3 text-right text-rose-600 font-bold font-mono">{stg.rejectedQuantity || stg.wastageQuantity || 0}</td>
-                      <td className="p-3 text-[10px] text-zinc-500">
+                      <td className="p-2.5 sm:p-3 text-right font-mono">{stg.quantitySent || 0}</td>
+                      <td className="p-2.5 sm:p-3 text-right font-bold text-zinc-900 dark:text-zinc-100 font-mono">{stg.quantityCompleted || stg.quantityReceived || 0}</td>
+                      <td className="p-2.5 sm:p-3 text-right text-rose-600 font-bold font-mono">{stg.rejectedQuantity || stg.wastageQuantity || 0}</td>
+                      <td className="p-2.5 sm:p-3 text-[10px] text-zinc-500">
                         {stg.completedDate ? `Done: ${stg.completedDate}` : `Issued: ${stg.assignedDate}`}
                       </td>
-                      <td className="p-3">
+                      <td className="p-2.5 sm:p-3">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                             stg.status === 'Completed'
@@ -606,46 +668,46 @@ export const ProductionChallanModal: React.FC<ProductionChallanModalProps> = ({
             </div>
           </div>
 
-          {/* Summary Totals */}
-          <div className="grid grid-cols-3 gap-3 p-3.5 bg-zinc-100 dark:bg-zinc-950 rounded-xl text-xs font-mono">
-            <div>
+          {/* Summary Totals (Responsive on Mobile) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 p-3.5 bg-zinc-100 dark:bg-zinc-950 rounded-xl text-xs font-mono print-subtle-bg avoid-break">
+            <div className="flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
               <span className="text-zinc-400 block text-[10px]">TOTAL PLANNED:</span>
-              <strong className="text-zinc-900 dark:text-zinc-100 text-sm font-bold">
+              <strong className="text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm font-bold">
                 {(order.plannedQuantity || order.quantity || order.total).toLocaleString()} Pcs
               </strong>
             </div>
-            <div>
+            <div className="flex sm:flex-col justify-between sm:justify-start items-center sm:items-start border-t sm:border-t-0 pt-1.5 sm:pt-0 border-zinc-200 dark:border-zinc-800">
               <span className="text-zinc-400 block text-[10px]">FINISHED GOODS ACCEPTED:</span>
-              <strong className="text-emerald-600 dark:text-emerald-400 text-sm font-bold">
+              <strong className="text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm font-bold print-emerald-text">
                 {finalGoodUnits.toLocaleString()} Pcs
               </strong>
             </div>
-            <div>
+            <div className="flex sm:flex-col justify-between sm:justify-start items-center sm:items-start border-t sm:border-t-0 pt-1.5 sm:pt-0 border-zinc-200 dark:border-zinc-800">
               <span className="text-zinc-400 block text-[10px]">CUMULATIVE REJECTIONS:</span>
-              <strong className="text-rose-600 text-sm font-bold">
+              <strong className="text-rose-600 text-xs sm:text-sm font-bold">
                 {totalRejected.toLocaleString()} Pcs
               </strong>
             </div>
           </div>
 
-          {/* Signatures */}
-          <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-2 gap-8 text-xs font-mono">
-            <div className="space-y-12">
+          {/* Signatures (Responsive on Mobile) */}
+          <div className="pt-6 sm:pt-8 border-t border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-6 sm:gap-8 justify-between items-center sm:items-end text-center avoid-break">
+            <div className="space-y-6 sm:space-y-10 w-full sm:w-auto">
               <span className="text-[11px] text-zinc-500 uppercase font-bold block">
                 {isFirstStage
                   ? `Dispatched By (${godownInfo.name} In-Charge)`
-                  : `Dispatched & Handed Over By (${prevStagePerson.name} - ${prevStagePerson.stageName})`}
+                  : `Dispatched By (${prevStagePerson.name} - ${prevStagePerson.stageName})`}
               </span>
-              <div className="border-t border-zinc-400 pt-1 text-[10px] text-zinc-500">
+              <div className="w-48 sm:w-44 border-t border-zinc-400 mx-auto sm:mx-0 pt-1 text-[10px] text-zinc-500">
                 {isFirstStage ? 'Authorized Signature & Stamp' : 'Contractor Signature & Stamp'}
               </div>
             </div>
 
-            <div className="space-y-12 text-right">
+            <div className="space-y-6 sm:space-y-10 w-full sm:w-auto text-center sm:text-right">
               <span className="text-[11px] text-zinc-500 uppercase font-bold block">
-                {activeStageNormalized === 'Finished Goods' ? `Received & Inwarded By (${godownInfo.managerName || 'Stores In-Charge'})` : `Received & Acknowledged By (${activeChallan.contractorName})`}
+                {activeStageNormalized === 'Finished Goods' ? `Received By (${godownInfo.managerName || 'Stores In-Charge'})` : `Received By (${activeChallan.contractorName})`}
               </span>
-              <div className="border-t border-zinc-400 pt-1 text-[10px] text-zinc-500">
+              <div className="w-48 sm:w-auto border-t border-zinc-400 mx-auto sm:mx-0 pt-1 text-[10px] text-zinc-500">
                 Contractor Signature &amp; Date
               </div>
             </div>

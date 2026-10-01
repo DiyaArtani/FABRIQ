@@ -625,10 +625,6 @@ export const AdvanceStageModal: React.FC<AdvanceStageModalProps> = ({
                 </span>
               </div>
             )}
-
-            <p className="text-[10px] text-zinc-500">
-              🔒 Persistent Challan Number <strong className="text-emerald-700 dark:text-emerald-400">{order.challanNumber}</strong> stays locked throughout all 4 stages.
-            </p>
           </div>
 
           {/* Action Buttons */}
