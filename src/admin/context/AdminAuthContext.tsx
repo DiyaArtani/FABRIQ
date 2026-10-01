@@ -31,9 +31,19 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [adminUser, setAdminUser] = useState<AppUser | null>(() => {
     try {
       const sessionSaved = sessionStorage.getItem('fabriq_admin_session_auth');
-      if (sessionSaved) return JSON.parse(sessionSaved);
+      if (sessionSaved) {
+        const parsed = JSON.parse(sessionSaved);
+        if (parsed && (parsed.role === 'Admin' || parsed.role?.toLowerCase() === 'admin')) {
+          return parsed;
+        }
+      }
       const localSaved = localStorage.getItem('fabriq_admin_session_auth') || localStorage.getItem('fabriq_admin_session');
-      if (localSaved) return JSON.parse(localSaved);
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (parsed && (parsed.role === 'Admin' || parsed.role?.toLowerCase() === 'admin')) {
+          return parsed;
+        }
+      }
     } catch {
       return null;
     }
@@ -52,8 +62,12 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return null;
   });
 
-  const isAdminAuthenticated = !!adminUser;
-  const isEmployeeAuthenticated = !!employeeUser;
+  const isAdminAuthenticated = Boolean(
+    adminUser &&
+    (adminUser.role === 'Admin' || (adminUser.role as string)?.toLowerCase() === 'admin') &&
+    adminUser.status !== 'Disabled'
+  );
+  const isEmployeeAuthenticated = Boolean(employeeUser && employeeUser.status !== 'Disabled');
 
   // Firebase Auth state change listener
   useEffect(() => {
@@ -61,26 +75,26 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const unsubscribe = onAuthStateChanged(auth, (fbUser: FirebaseUser | null) => {
       if (fbUser) {
-        // Restore admin user if an admin session exists or user is an Admin
-        const hasActiveSession = !!sessionStorage.getItem('fabriq_admin_session_auth') || !!localStorage.getItem('fabriq_admin_session_auth') || !!localStorage.getItem('fabriq_admin_session');
-        if (hasActiveSession) {
-          const matched = users.find(u => (u.email || '').toLowerCase() === (fbUser.email || '').toLowerCase());
-          if (matched && matched.role === 'Admin') {
-            setAdminUser(matched);
-          } else if (fbUser.email) {
-            const newUser: AppUser = {
-              id: fbUser.uid,
-              employeeId: `FB-${fbUser.uid.substring(0, 5).toUpperCase()}`,
-              name: fbUser.displayName || fbUser.email.split('@')[0],
-              email: fbUser.email,
-              phone: fbUser.phoneNumber || '',
-              role: 'Admin',
-              status: 'Active',
-              createdAt: new Date().toISOString().substring(0, 10),
-              lastLogin: new Date().toLocaleString()
-            };
-            setAdminUser(newUser);
+        const matched = users.find(u => (u.email || '').toLowerCase() === (fbUser.email || '').toLowerCase());
+        if (matched) {
+          if (matched.role === 'Admin') {
+            const hasActiveSession = !!sessionStorage.getItem('fabriq_admin_session_auth') || !!localStorage.getItem('fabriq_admin_session_auth');
+            if (hasActiveSession) {
+              setAdminUser(matched);
+            }
+          } else {
+            // Strictly non-admin employee: ensure adminUser is cleared and never inherited
+            setAdminUser(null);
+            sessionStorage.removeItem('fabriq_admin_session_auth');
+            localStorage.removeItem('fabriq_admin_session_auth');
+            localStorage.removeItem('fabriq_admin_session');
           }
+        }
+      } else {
+        // User logged out from Firebase Auth
+        const hasOfflineSession = sessionStorage.getItem('fabriq_admin_session_auth') || localStorage.getItem('fabriq_admin_session_auth');
+        if (!hasOfflineSession) {
+          setAdminUser(null);
         }
       }
     });

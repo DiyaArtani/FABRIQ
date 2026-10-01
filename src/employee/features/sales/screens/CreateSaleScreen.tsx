@@ -463,11 +463,10 @@ export default function CreateSaleScreen({ onBack, onCreated }: CreateSaleScreen
                   key={opt.rate}
                   type="button"
                   onClick={() => setGstRate(opt.rate)}
-                  className={`py-2 px-3 text-xs font-mono font-bold rounded-xl border transition-all cursor-pointer text-center ${
-                    gstRate === opt.rate
+                  className={`py-2 px-3 text-xs font-mono font-bold rounded-xl border transition-all cursor-pointer text-center ${gstRate === opt.rate
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-gray-50 dark:bg-neutral-950 text-gray-700 dark:text-neutral-300 border-gray-200 dark:border-neutral-800 hover:border-emerald-500'
-                  }`}
+                    }`}
                 >
                   {opt.label}
                 </button>
@@ -532,19 +531,18 @@ export default function CreateSaleScreen({ onBack, onCreated }: CreateSaleScreen
                         setPaidAmount(0);
                       }
                     }}
-                    className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
-                      isSelected
+                    className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${isSelected
                         ? status === 'Paid'
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : status === 'Partial'
-                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                          : 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-rose-600 text-white border-rose-600 shadow-xs'
                         : 'bg-gray-50 dark:bg-neutral-950 text-gray-700 dark:text-neutral-300 border-gray-200 dark:border-neutral-800 hover:border-gray-400'
-                    }`}
+                      }`}
                   >
-                    {status === 'Paid' && '✓ Paid (Full)'}
-                    {status === 'Partial' && '◐ Partial Payment'}
-                    {status === 'Pending' && '⏳ Pending (Unpaid)'}
+                    {status === 'Paid' && ' Paid (Full)'}
+                    {status === 'Partial' && ' Partial Payment'}
+                    {status === 'Pending' && ' Pending (Unpaid)'}
                   </button>
                 );
               })}

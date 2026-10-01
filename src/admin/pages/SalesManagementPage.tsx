@@ -859,9 +859,9 @@ export const SalesManagementPage: React.FC = () => {
                             : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:border-zinc-400'
                             }`}
                         >
-                          {status === 'Paid' && '✓ Paid'}
-                          {status === 'Partial' && '◐ Partial'}
-                          {status === 'Pending' && '⏳ Pending'}
+                          {status === 'Paid' && ' Paid'}
+                          {status === 'Partial' && ' Partial'}
+                          {status === 'Pending' && ' Pending'}
                         </button>
                       );
                     })}
