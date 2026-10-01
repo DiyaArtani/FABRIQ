@@ -254,16 +254,6 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
             </button>
           </div>
 
-          {/* Sharing Information Note */}
-          <div className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 text-[11px] leading-relaxed flex items-start gap-2.5">
-            <span className="text-sm select-none">⚡</span>
-            <div className="space-y-0.5">
-              <strong className="text-zinc-800 dark:text-zinc-200 block">Direct WhatsApp Delivery</strong>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                Clicking the button will open WhatsApp directly to <strong>+{cleanPhone || 'recipient'}</strong> with no automated message. The official invoice PDF will download simultaneously for quick attachment.
-              </p>
-            </div>
-          </div>
 
           {/* Active Share & Download Status */}
           {hasShared && (
